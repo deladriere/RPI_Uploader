@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RP2040 Boot Mode Test (Web Serial)</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 2rem;
+            line-height: 1.4;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            margin: 0 0 1rem;
+        }
+
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        button {
+            padding: 0.5rem 0.9rem;
+            border-radius: 0.5rem;
+            border: 1px solid #8885;
+            background: #eee;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        input,
+        select {
+            padding: 0.4rem 0.5rem;
+            border-radius: 0.4rem;
+            border: 1px solid #8885;
+        }
+
+        .muted {
+            opacity: 0.8;
+            font-size: 0.95rem;
+        }
+
+        pre {
+            background: #00000010;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            max-height: 40vh;
+            overflow: auto;
+        }
+
+        .badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            background: #8882;
+            font-size: 0.8rem;
+            border: 1px solid #8884;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>RP2040 Boot Mode Test (Web Serial)</h1>
+
+    <p class="muted">
+        Use Chrome or Edge (Web Serial required). Safari currently does not support Web Serial.
+    </p>
+
+    <div class="row">
+        <button id="btn-pick">Pick device</button>
+        <span id="port-info" class="badge">No device selected</span>
+    </div>
+
+    <div class="row">
+        <button id="btn-1200">Try 1200-bps touch</button>
+        <span class="muted">Opens the selected serial device at 1200 bps, toggles DTR/RTS, then closes. Requires
+            firmware/bootloader support.</span>
+    </div>
+
+    <fieldset style="border:1px solid #8884; padding: 0.75rem 1rem; border-radius: 0.5rem; margin: 1rem 0;">
+        <legend>Send custom reboot command (firmware-defined)</legend>
+        <div class="row">
+            <label>Baud:
+                <input id="baud-input" type="number" value="115200" min="1200" step="100" style="width: 8rem;" />
+            </label>
+            <label>Command:
+                <input id="cmd-input" type="text" placeholder="e.g. BOOTSEL or REBOOT-BOOTSEL" size="28" />
+            </label>
+            <label><input id="chk-cr" type="checkbox" checked /> Append CR (\r)</label>
+            <label><input id="chk-lf" type="checkbox" /> Append LF (\n)</label>
+            <button id="btn-send">Open & send</button>
+            <button id="btn-close" disabled>Close port</button>
+        </div>
+        <div class="muted">Your firmware must listen for this command and call reset_usb_boot().</div>
+    </fieldset>
+
+    <div class="row">
+        <button id="btn-clear">Clear log</button>
+        <span class="muted">After a successful reboot to BOOTSEL, the device will disconnect and re-enumerate as a
+            mass-storage device (RPI-RP2).</span>
+    </div>
+
+    <fieldset style="border:1px solid #8884; padding: 0.75rem 1rem; border-radius: 0.5rem; margin: 1rem 0;">
+        <legend>Program UF2 to RPI-RP2 (Chrome/Edge)</legend>
+        <div class="row">
+            <button id="btn-uf2">Select UF2 file…</button>
+            <input id="file-uf2" type="file" accept=".uf2" style="display:none" />
+            <span id="uf2-info" class="badge">No file selected</span>
+        </div>
+        <div class="row">
+            <input id="uf2-url" type="url" placeholder="https://example.com/firmware.uf2" size="48" />
+            <button id="btn-fetch-uf2">Fetch from URL</button>
+            <span id="url-info" class="badge">Optional</span>
+        </div>
+        <div class="row">
+            <button id="btn-pick-drive">Pick RPI-RP2 drive…</button>
+            <span id="drive-info" class="badge">No drive selected</span>
+        </div>
+        <div class="row">
+            <button id="btn-write-uf2" disabled>Write UF2 to drive</button>
+        </div>
+        <div class="muted">Writes the UF2 to the selected drive. The board will reboot and the drive will disappear
+            after copy.</div>
+    </fieldset>
+
+    <pre id="log" aria-live="polite"></pre>
+
+    <script>
+        const logEl = document.getElementById('log');
+        const pickBtn = document.getElementById('btn-pick');
+        const infoEl = document.getElementById('port-info');
+        const touchBtn = document.getElementById('btn-1200');
+        const sendBtn = document.getElementById('btn-send');
+        const closeBtn = document.getElementById('btn-close');
+        const baudInput = document.getElementById('baud-input');
+        const cmdInput = document.getElementById('cmd-input');
+        const chkCR = document.getElementById('chk-cr');
+        const chkLF = document.getElementById('chk-lf');
+        const clearBtn = document.getElementById('btn-clear');
+        const pickUf2Btn = document.getElementById('btn-uf2');
+        const fileUf2Input = document.getElementById('file-uf2');
+        const uf2Info = document.getElementById('uf2-info');
+        const uf2UrlInput = document.getElementById('uf2-url');
+        const fetchUf2Btn = document.getElementById('btn-fetch-uf2');
+        const urlInfo = document.getElementById('url-info');
+        const pickDriveBtn = document.getElementById('btn-pick-drive');
+        const driveInfo = document.getElementById('drive-info');
+        const writeUf2Btn = document.getElementById('btn-write-uf2');
+
+        let selectedPort = null;
+        let isOpen = false;
+        let selectedDirectory = null; // RPI-RP2 directory handle
+        let uf2Blob = null;           // Chosen UF2 content
+        let uf2Name = '';             // Name to write on the drive
+
+        function log(message) {
+            const ts = new Date().toLocaleTimeString();
+            logEl.textContent += `[${ts}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function requireWebSerial() {
+            if (!('serial' in navigator)) {
+                const msg = 'Web Serial API not available. Use Chrome/Edge and enable it if needed.';
+                alert(msg);
+                log(msg);
+                return false;
+            }
+            return true;
+        }
+
+        function describePort(port) {
+            try {
+                const info = port.getInfo?.() || {};
+                const usb = [];
+                if (info.usbVendorId != null) usb.push('vid=' + info.usbVendorId.toString(16));
+                if (info.usbProductId != null) usb.push('pid=' + info.usbProductId.toString(16));
+                return usb.length ? `USB(${usb.join(',')})` : 'Unknown interface';
+            } catch {
+                return 'Unknown interface';
+            }
+        }
+
+        function setInfo(text) {
+            infoEl.textContent = text;
+        }
+
+        function setDrive(text) {
+            driveInfo.textContent = text;
+        }
+
+        function setUf2Status(text) {
+            uf2Info.textContent = text;
+        }
+
+        function explainFsWriteError(e) {
+            const name = e?.name || '';
+            const msg = String(e?.message || e || '');
+            let hint = '';
+            if (!window.isSecureContext) {
+                hint += '\n- This page is not in a secure context. Use https or http://localhost.';
+            }
+            if (msg.toLowerCase().includes('security')) {
+                hint += '\n- macOS: System Settings → Privacy & Security → Files and Folders → allow Chrome/Edge access to Removable Volumes.';
+                hint += '\n- Windows: If Controlled folder access is on, allow Chrome/Edge or turn it off temporarily.';
+            }
+            if (!window.showDirectoryPicker) {
+                hint += '\n- Your browser does not support the File System Access API (use Chrome/Edge).';
+            }
+            return `${name}: ${msg}${hint ? '\n\nHints:' + hint : ''}`;
+        }
+
+        async function pickDevice() {
+            if (!requireWebSerial()) return;
+            try {
+                const port = await navigator.serial.requestPort();
+                selectedPort = port;
+                setInfo(describePort(port));
+                log('Device selected: ' + describePort(port));
+            } catch (e) {
+                log('Device selection cancelled or failed.');
+                console.error(e);
+            }
+        }
+
+        async function ensureClosed() {
+            try {
+                if (selectedPort && isOpen) {
+                    await selectedPort.close();
+                    isOpen = false;
+                    closeBtn.disabled = true;
+                    log('Port closed.');
+                }
+            } catch (e) {
+                console.warn('ensureClosed error', e);
+            }
+        }
+
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        function isLikelyRebootError(e) {
+            const text = String(e?.message || e || '').toLowerCase();
+            // Common messages when the device resets while the port is open/closing
+            return text.includes('device has been lost')
+                || text.includes('was disconnected')
+                || text.includes('transfer error')
+                || text.includes('pipe error')
+                || text.includes('operation timed out');
+        }
+
+        async function do1200BpsTouch() {
+            if (!selectedPort) {
+                await pickDevice();
+                if (!selectedPort) return;
+            }
+            await ensureClosed();
+            try {
+                log('Opening at 1200 bps...');
+                await selectedPort.open({ baudRate: 1200 });
+                isOpen = true;
+                closeBtn.disabled = false;
+
+                // Some implementations watch DTR/RTS transitions
+                if (selectedPort.setSignals) {
+                    await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+                    await sleep(20);
+                    await selectedPort.setSignals({ dataTerminalReady: true, requestToSend: false });
+                    await sleep(20);
+                    await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+                }
+
+                // Close promptly; device should reset if it supports the 1200-bps touch
+                await selectedPort.close();
+                isOpen = false;
+                closeBtn.disabled = true;
+                log('Closed after 1200-bps touch. If supported, device should reboot to bootloader.');
+                alert('If your firmware/bootloader supports it, the device should now be in BOOTSEL/UF2 mode.');
+            } catch (e) {
+                console.error(e);
+                if (isLikelyRebootError(e)) {
+                    // Treat disconnect during touch as success — device likely rebooted into BOOTSEL
+                    isOpen = false;
+                    closeBtn.disabled = true;
+                    log('Device disconnected during 1200-bps touch (expected). Likely rebooted to BOOTSEL.');
+                    alert('Success: device likely rebooted to BOOTSEL/UF2. If mounted as RPI-RP2, you are good.');
+                } else {
+                    log('1200-bps touch failed: ' + (e?.message || e));
+                    alert('Failed to open at 1200 bps or toggle signals.');
+                }
+            }
+        }
+
+        async function openAndSendCommand() {
+            if (!selectedPort) {
+                await pickDevice();
+                if (!selectedPort) return;
+            }
+
+            const baud = parseInt(baudInput.value || '115200', 10);
+            const raw = cmdInput.value || '';
+            const suffix = (chkCR.checked ? '\r' : '') + (chkLF.checked ? '\n' : '');
+            const payload = raw + suffix;
+
+            await ensureClosed();
+            try {
+                log(`Opening at ${baud} bps...`);
+                await selectedPort.open({ baudRate: baud });
+                isOpen = true;
+                closeBtn.disabled = false;
+
+                const writer = selectedPort.writable.getWriter();
+                const enc = new TextEncoder();
+                const data = enc.encode(payload);
+                await writer.write(data);
+                writer.releaseLock();
+                log(`Sent ${data.length} bytes: ${JSON.stringify(payload)}`);
+                log('If firmware listens for this command, it may now call reset_usb_boot().');
+            } catch (e) {
+                console.error(e);
+                log('Send failed: ' + (e?.message || e));
+            }
+        }
+
+        async function closePort() {
+            await ensureClosed();
+        }
+
+        pickBtn.addEventListener('click', pickDevice);
+        touchBtn.addEventListener('click', do1200BpsTouch);
+        sendBtn.addEventListener('click', openAndSendCommand);
+        closeBtn.addEventListener('click', closePort);
+        clearBtn.addEventListener('click', () => { logEl.textContent = ''; });
+
+        // ===== UF2 programming helpers =====
+        async function pickUf2File() {
+            try {
+                if (window.showOpenFilePicker) {
+                    const [handle] = await window.showOpenFilePicker({
+                        multiple: false,
+                        types: [{ description: 'UF2 firmware', accept: { 'application/octet-stream': ['.uf2'] } }]
+                    });
+                    const file = await handle.getFile();
+                    uf2Blob = file;
+                    uf2Name = file.name || 'firmware.uf2';
+                    setUf2Status(uf2Name + ' (' + file.size + ' bytes)');
+                    log('UF2 selected: ' + uf2Name);
+                } else {
+                    fileUf2Input.click();
+                }
+            } catch (e) {
+                log('UF2 selection cancelled.');
+            }
+            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
+        }
+
+        pickUf2Btn.addEventListener('click', pickUf2File);
+        fileUf2Input.addEventListener('change', async (ev) => {
+            const file = ev.target.files?.[0];
+            if (file) {
+                uf2Blob = file;
+                uf2Name = file.name || 'firmware.uf2';
+                setUf2Status(uf2Name + ' (' + file.size + ' bytes)');
+                log('UF2 selected: ' + uf2Name);
+            }
+            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
+        });
+
+        async function fetchUf2FromUrl() {
+            const url = (uf2UrlInput.value || '').trim();
+            if (!url) { alert('Enter a UF2 URL first.'); return; }
+            try {
+                urlInfo.textContent = 'Fetching…';
+                const res = await fetch(url, { cache: 'no-cache' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const blob = await res.blob();
+                uf2Blob = blob;
+                try { uf2Name = new URL(url).pathname.split('/').pop() || 'firmware.uf2'; } catch { uf2Name = 'firmware.uf2'; }
+                setUf2Status(uf2Name + ' (' + blob.size + ' bytes)');
+                urlInfo.textContent = 'Fetched';
+                log('UF2 fetched from URL: ' + uf2Name);
+            } catch (e) {
+                console.error(e);
+                urlInfo.textContent = 'Fetch failed';
+                alert('Failed to fetch UF2: ' + (e?.message || e));
+            }
+            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
+        }
+        fetchUf2Btn.addEventListener('click', fetchUf2FromUrl);
+
+        async function pickDrive() {
+            if (!window.showDirectoryPicker) {
+                alert('Your browser does not support the File System Access API (need Chrome/Edge).');
+                return;
+            }
+            try {
+                const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+                selectedDirectory = dir;
+                setDrive('Picked');
+                log('Drive picked. Checking for UF2 markers...');
+                let likely = false;
+                try { await dir.getFileHandle('INFO_UF2.TXT'); likely = true; } catch { }
+                try { await dir.getFileHandle('INDEX.HTM'); likely = true; } catch { }
+                if (likely) setDrive('RPI-RP2 (likely)');
+            } catch (e) {
+                log('Drive selection cancelled.');
+            }
+            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
+        }
+        pickDriveBtn.addEventListener('click', pickDrive);
+
+        async function writeUf2ToDrive() {
+            if (!selectedDirectory || !uf2Blob) { alert('Pick a UF2 and the drive first.'); return; }
+            try {
+                writeUf2Btn.disabled = true;
+                const fileHandle = await selectedDirectory.getFileHandle(uf2Name || 'firmware.uf2', { create: true });
+                const writable = await fileHandle.createWritable();
+                const buf = await uf2Blob.arrayBuffer();
+                log('Writing ' + (buf.byteLength || 0) + ' bytes to ' + (uf2Name || 'firmware.uf2') + '...');
+                await writable.write(buf);
+                await writable.close();
+                log('Write complete. Device should reboot and the drive may disappear.');
+                alert('UF2 written. The device should reboot now.');
+            } catch (e) {
+                console.error(e);
+                alert('Failed to write UF2: ' + explainFsWriteError(e));
+            } finally {
+                writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
+            }
+        }
+        writeUf2Btn.addEventListener('click', writeUf2ToDrive);
+
+        // Initial capability check
+        if (!('serial' in navigator)) {
+            setInfo('Web Serial not available');
+            log('Web Serial not available. Use Chrome/Edge.');
+        }
+
+        // Log connect/disconnect to make reboot behavior clearer
+        if ('serial' in navigator) {
+            navigator.serial.addEventListener('connect', (e) => {
+                try { log('Serial device connected: ' + describePort(e.port)); } catch { log('Serial device connected.'); }
+            });
+            navigator.serial.addEventListener('disconnect', (e) => {
+                if (selectedPort && e.port === selectedPort) {
+                    log('Selected device disconnected (likely reboot).');
+                } else {
+                    try { log('Serial device disconnected: ' + describePort(e.port)); } catch { log('Serial device disconnected.'); }
+                }
+            });
+        }
+
+        // File System Access capability notes
+        if (!window.isSecureContext) {
+            log('Warning: Not a secure context. File System Access may be limited. Use https or localhost.');
+        }
+        if (!window.showDirectoryPicker) {
+            log('File System Access API not available. UF2 writing requires Chrome/Edge.');
+        }
+    </script>
+</body>
+
+</html>
