@@ -343,7 +343,9 @@
         let uf2Blob = null;           // Chosen UF2 content
         let uf2Name = '';             // Name to write on the drive
         let expectingReboot = false;  // True during/after 1200-bps touch
-        let rebootSuccessful = false;  // True when reboot to bootloader succeeded
+        let portDisconnected = false; // True when port disappeared (but not confirmed in bootloader)
+        let rebootSuccessful = false;  // True when RPI-RP2 drive is verified
+        let selectedPortInfo = null;  // Store port info for comparison with disconnect events
 
         function log(message) {
             const ts = new Date().toLocaleTimeString();
@@ -404,12 +406,15 @@
             paneConnect.classList.add('active');
             paneConnect.classList.remove('pane-disabled');
 
-            // Pane 2 (Drive) becomes active after successful reboot
-            if (rebootSuccessful) {
+            // Pane 2 (Drive) becomes active when port disconnects (allows picking drive)
+            // Success is only confirmed when RPI-RP2 drive is verified
+            if (portDisconnected || rebootSuccessful) {
                 paneDrive.classList.remove('pane-disabled');
                 paneDrive.classList.add('active');
                 pickDriveBtn.disabled = false;
-                driveStatus.textContent = 'Ready to pick drive';
+                if (!rebootSuccessful) {
+                    driveStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                }
             } else {
                 paneDrive.classList.add('pane-disabled');
                 paneDrive.classList.remove('active');
@@ -457,15 +462,47 @@
         async function pickDevice() {
             if (!requireWebSerial()) return;
             try {
+                // Reset all state when picking a new device
+                portDisconnected = false;
+                rebootSuccessful = false;
+                expectingReboot = false;
+                selectedDirectory = null;
+                uf2Blob = null;
+                uf2Name = '';
+
+                // Reset button states
+                touchBtn.classList.remove('state-busy', 'state-success', 'state-error');
+                touchBtn.disabled = true;
+                pickDriveBtn.classList.remove('state-busy', 'state-success', 'state-error');
+                writeUf2Btn.classList.remove('state-busy', 'state-success', 'state-error');
+
+                // Reset info badges
+                infoEl.classList.remove('state-success', 'state-error');
+                driveInfo.classList.remove('state-success', 'state-error');
+                uf2Info.classList.remove('state-success', 'state-error');
+                writeReady.classList.remove('state-success', 'state-error');
+
                 // Visual feedback while the browser device picker is open
                 pickBtn.classList.remove('state-success', 'state-error');
                 pickBtn.classList.add('state-busy');
-                infoEl.classList.remove('state-success', 'state-error');
                 infoEl.classList.add('state-busy');
                 connectStatus.textContent = 'Selecting device...';
+                driveStatus.textContent = 'Waiting for reboot...';
+                uploadStatus.textContent = 'Waiting for drive selection...';
+
+                // Reset info text
+                setInfo('Selecting...');
+                setDrive('No drive selected');
+                setUf2Status('No file selected');
+                writeReady.textContent = 'Not ready';
 
                 const port = await navigator.serial.requestPort();
                 selectedPort = port;
+                try {
+                    selectedPortInfo = port.getInfo?.() || {};
+                } catch {
+                    selectedPortInfo = {};
+                }
                 setInfo(describePort(port));
                 log('Device selected: ' + describePort(port));
 
@@ -476,6 +513,10 @@
                 infoEl.classList.add('state-success');
                 touchBtn.disabled = false;
                 connectStatus.textContent = 'Device connected';
+
+                // Update pane states to default
+                updatePaneStates();
+                updateWriteReadyBadge();
             } catch (e) {
                 log('Device selection cancelled or failed.');
                 console.error(e);
@@ -555,53 +596,67 @@
                 await selectedPort.close();
                 isOpen = false;
 
-                // Give the device a moment to reboot and disappear
-                await sleep(100);
+                // Give the device a moment to reboot and disappear (increased wait for disconnect event)
+                await sleep(500);
 
-                // Check if the port is still available - if it disappeared, reboot was successful
-                let portStillExists = false;
-                try {
-                    // Try to access port info - if port disappeared, this might fail or the port object becomes invalid
-                    selectedPort.getInfo();
-                    portStillExists = true;
-                } catch {
-                    portStillExists = false;
-                }
-
-                if (!portStillExists) {
-                    // Port disappeared = successful reboot to BOOTSEL!
-                    log('Serial port disappeared - reboot successful! Device should now appear as RPI-RP2 drive.');
-                    toast('Reboot successful! Serial port disappeared. Look for RPI-RP2 drive.', 'success');
-                    selectedPort = null;
-                    setInfo('Device rebooted (port disappeared)');
+                // Check if port was already marked as disconnected by the event handler
+                if (portDisconnected) {
+                    // Disconnect event already handled it - nothing to do here
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-success');
-                    connectStatus.textContent = 'Reboot successful - port disappeared';
-                    rebootSuccessful = true;
-                    updatePaneStates();
+                    log('Port disconnect confirmed by event handler. Please verify RPI-RP2 drive appears.');
                 } else {
-                    log('Closed after 1200-bps touch. If device reboots, the serial port will disappear and RPI-RP2 will mount.');
-                    toast('1200-bps touch completed. Check if serial port disappears (success) or RPI-RP2 mounts.', 'info');
-                    touchBtn.classList.remove('state-busy');
-                    touchBtn.classList.add('state-success');
-                    connectStatus.textContent = 'Touch completed - waiting for port disconnect';
-                    // Still enable pane 2 in case device reboots
-                    rebootSuccessful = true;
-                    updatePaneStates();
+                    // Check if the port is still available - if it disappeared, reboot was successful
+                    let portStillExists = false;
+                    try {
+                        // Try to access port info - if port disappeared, this might fail or the port object becomes invalid
+                        if (selectedPort) {
+                            selectedPort.getInfo();
+                            portStillExists = true;
+                        }
+                    } catch {
+                        portStillExists = false;
+                    }
+
+                    if (!portStillExists || !selectedPort) {
+                        // Port disappeared - this is a good sign, but not confirmation
+                        log('Serial port disappeared. Please verify RPI-RP2 drive appears before confirming reboot success.');
+                        toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
+                        selectedPort = null;
+                        selectedPortInfo = null;
+                        setInfo('Port disconnected - verify drive');
+                        touchBtn.classList.remove('state-busy');
+                        touchBtn.classList.add('state-success');
+                        connectStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                        portDisconnected = true;
+                        rebootSuccessful = false; // Not confirmed until drive is picked
+                        updatePaneStates();
+                    } else {
+                        log('Closed after 1200-bps touch. Serial port still present - device may not have rebooted to bootloader.');
+                        toast('Port still present. Device may not be in bootloader mode.', 'error');
+                        touchBtn.classList.remove('state-busy');
+                        touchBtn.classList.add('state-error');
+                        connectStatus.textContent = 'Touch completed but port still present';
+                        portDisconnected = false;
+                        rebootSuccessful = false;
+                        updatePaneStates();
+                    }
                 }
             } catch (e) {
                 console.error(e);
                 if (isLikelyRebootError(e)) {
-                    // Port disconnected during operation = successful reboot!
+                    // Port disconnected during operation - good sign, but verify drive
                     isOpen = false;
-                    log('Serial port disappeared during 1200-bps touch - reboot successful! Device should now appear as RPI-RP2 drive.');
-                    toast('Reboot successful! Serial port disappeared. Look for RPI-RP2 drive.', 'success');
+                    log('Serial port disappeared during 1200-bps touch. Please verify RPI-RP2 drive appears to confirm bootloader mode.');
+                    toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
                     selectedPort = null;
-                    setInfo('Device rebooted (port disappeared)');
+                    selectedPortInfo = null;
+                    setInfo('Port disconnected - verify drive');
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-success');
-                    connectStatus.textContent = 'Reboot successful - port disappeared';
-                    rebootSuccessful = true;
+                    connectStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                    portDisconnected = true;
+                    rebootSuccessful = false; // Not confirmed until drive is picked
                     updatePaneStates();
                 } else {
                     log('1200-bps touch failed: ' + (e?.message || e));
@@ -609,6 +664,8 @@
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-error');
                     connectStatus.textContent = 'Reboot failed';
+                    portDisconnected = false;
+                    rebootSuccessful = false;
                 }
             } finally {
                 expectingReboot = false;
@@ -707,14 +764,20 @@
                     driveInfo.classList.remove('state-error');
                     log('UF2 markers found: this looks like the RPI-RP2 drive.');
                     driveStatus.textContent = 'Drive verified - RPI-RP2 detected';
-                    toast('RPI-RP2 drive selected and verified.', 'success');
+                    toast('RPI-RP2 drive selected and verified. Reboot to bootloader confirmed!', 'success');
+                    // NOW we can confirm reboot was successful
+                    rebootSuccessful = true;
+                    connectStatus.textContent = 'Reboot confirmed - RPI-RP2 verified';
+                    touchBtn.classList.add('state-success');
                 } else {
                     setDrive('Picked (unverified)');
                     driveInfo.classList.remove('state-success');
                     driveInfo.classList.add('state-error');
                     log('UF2 markers not found. Ensure you selected the root of the RPI-RP2 drive.');
                     driveStatus.textContent = 'Drive picked but not verified';
-                    toast('Warning: Selected drive does not appear to be RPI-RP2.', 'error');
+                    toast('Warning: Selected drive does not appear to be RPI-RP2. Reboot may not have succeeded.', 'error');
+                    rebootSuccessful = false;
+                    connectStatus.textContent = 'Drive not verified - reboot may have failed';
                 }
                 pickDriveBtn.classList.remove('state-busy');
                 pickDriveBtn.classList.add('state-success');
@@ -771,23 +834,23 @@
                 try { log('Serial device connected: ' + describePort(e.port)); } catch { log('Serial device connected.'); }
             });
             navigator.serial.addEventListener('disconnect', (e) => {
-                if (selectedPort && e.port === selectedPort) {
-                    if (expectingReboot) {
-                        // Port disappeared after 1200-bps touch = successful reboot!
-                        log('Serial port disappeared - reboot successful! Device should now appear as RPI-RP2 drive.');
-                        toast('Reboot successful! Serial port disappeared. Look for RPI-RP2 drive.', 'success');
-                        selectedPort = null;
-                        isOpen = false;
-                        setInfo('Device rebooted (port disappeared)');
-                        touchBtn.classList.remove('state-busy', 'state-error');
-                        touchBtn.classList.add('state-success');
-                        connectStatus.textContent = 'Reboot successful - port disappeared';
-                        expectingReboot = false;
-                        rebootSuccessful = true;
-                        updatePaneStates();
-                    } else {
-                        log('Selected device disconnected (likely reboot).');
-                    }
+                // If we're expecting a reboot, ANY disconnect is likely our device rebooting
+                if (expectingReboot) {
+                    log('Serial port disappeared during reboot. Please pick RPI-RP2 drive to verify bootloader mode.');
+                    toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
+                    selectedPort = null;
+                    selectedPortInfo = null;
+                    isOpen = false;
+                    setInfo('Port disconnected - verify drive');
+                    touchBtn.classList.remove('state-busy', 'state-error');
+                    touchBtn.classList.add('state-success');
+                    connectStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                    expectingReboot = false;
+                    portDisconnected = true;
+                    rebootSuccessful = false; // Not confirmed until drive is picked
+                    updatePaneStates();
+                } else if (selectedPort && e.port === selectedPort) {
+                    log('Selected device disconnected (likely reboot).');
                 } else {
                     try { log('Serial device disconnected: ' + describePort(e.port)); } catch { log('Serial device disconnected.'); }
                 }
