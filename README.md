@@ -1,4 +1,6 @@
-## RP2040 Web Uploader (no BOOT/SEL access)
+## RP2040 Web Uploader v1.2 (no BOOT/SEL access)
+
+![Interface](Interface.png)
 
 This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` file directly from your browser. It is useful after assembly when the hardware BOOT/SEL buttons are not accessible.
 
@@ -9,19 +11,19 @@ This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` f
 
 ### Quick Start
 1. Open `rp2040-uploader.html` in Chrome/Edge (double-click, or drag it into a new tab).
-2. Click **Pick device** and select your RP2040 serial device.
-3. Try one of the reboot methods to reach BOOTSEL:
-   - **1200-bps touch**: Click **Try 1200-bps touch**. Works if your bootloader/firmware supports the 1200‑bps reset convention.
-   - **Custom command**: In "Send custom reboot command", enter the command your firmware expects (e.g. `BOOTSEL` or `REBOOT-BOOTSEL`) and click **Open & send**. Your firmware must call `reset_usb_boot()` when it receives this command.
-4. After a successful reboot, the board should reappear as a mass‑storage drive named **RPI-RP2**.
-5. Flash firmware:
-   - Click **Select UF2 file…** (or enter a **URL** and **Fetch from URL**).
-   - Click **Pick RPI-RP2 drive…** and choose the root of the RPI‑RP2 volume.
-   - Click **Write UF2 to drive**. The board will reboot when the copy completes.
+2. **Step 1 - Connect Device**: Click **Pick Device** and select your RP2040 serial device.
+3. **Step 2 - Start Bootloader**: Click **Reboot to Bootloader**. This uses the 1200‑bps touch method to reboot the device into BOOTSEL mode. The serial port will disappear when successful.
+4. **Step 3 - Confirm/Pick Drive**: After reboot, click **Pick RPI-RP2 Drive** and select the root of the RPI‑RP2 volume that appears on your computer.
+5. **Step 4 - Upload Firmware**: 
+   - Click **Select UF2 File** (or enter a **URL** and click **Fetch from URL**).
+   - Click **Write UF2 to Drive**. The board will reboot when the copy completes.
+
+**Alternative**: After **Step 2**, if you prefer to drag and drop manually, you can skip steps 3-4. Once the RPI-RP2 drive appears on your computer, simply drag your `.uf2` file onto the drive - it will automatically reboot when the file is copied.
 
 ### Notes
-- This tool does not require hardware BOOT/SEL access, but your current firmware must support either the **1200‑bps touch** reset or a **software command** that triggers `reset_usb_boot()`.
+- This tool does not require hardware BOOT/SEL access, but your current firmware must support the **1200‑bps touch** reset convention.
 - Works entirely in the browser; no drivers or installs are required on supported OSes.
+- The interface uses color coding: **Green** = active/completed step, **Blue** = available step, **Grey** = disabled step.
 
 ### Troubleshooting
 - "Web Serial not available": Use Chrome/Edge (desktop). Some managed environments disable it.

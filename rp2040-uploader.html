@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RP2040 Boot Mode Test (Web Serial) v1.1</title>
+    <title>RP2040 Boot Mode Test (Web Serial) v1.2</title>
     <style>
         :root {
             color-scheme: light dark;
@@ -23,19 +23,25 @@
 
         .workflow-container {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 1.5rem;
             margin-bottom: 2rem;
         }
 
-        @media (max-width: 1024px) {
+        @media (max-width: 1536px) {
+            .workflow-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
             .workflow-container {
                 grid-template-columns: 1fr;
             }
         }
 
         .pane {
-            border: 2px solid #8884;
+            border: 2px solid #64b5f6;
             border-radius: 0.75rem;
             padding: 1.25rem;
             background: #fafafa;
@@ -85,8 +91,8 @@
         button {
             padding: 0.6rem 1rem;
             border-radius: 0.5rem;
-            border: 1px solid #8885;
-            background: #eee;
+            border: 1px solid #64b5f6;
+            background: #e3f2fd;
             cursor: pointer;
             transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
             font-size: 0.95rem;
@@ -111,7 +117,7 @@
         select {
             padding: 0.5rem;
             border-radius: 0.4rem;
-            border: 1px solid #8885;
+            border: 1px solid #64b5f6;
             width: 100%;
             box-sizing: border-box;
         }
@@ -134,9 +140,9 @@
         .badge {
             padding: 0.25rem 0.6rem;
             border-radius: 999px;
-            background: #8882;
+            background: #bbdefb;
             font-size: 0.85rem;
-            border: 1px solid #8884;
+            border: 1px solid #64b5f6;
             display: inline-block;
         }
 
@@ -229,7 +235,7 @@
 </head>
 
 <body>
-    <h1>RP2040 Firmware Uploader <span class="badge">v1.1</span></h1>
+    <h1>RP2040 Firmware Uploader <span class="badge">v1.2</span></h1>
 
     <p class="muted" style="margin-bottom: 1.5rem;">
         Use Chrome or Edge (Web Serial required). Safari currently does not support Web Serial.
@@ -246,19 +252,30 @@
                 <span id="port-info" class="badge">No device selected</span>
             </div>
 
-            <div class="row">
-                <button id="btn-1200" disabled>Reboot to Bootloader</button>
-                <span class="muted">Reboots device into BOOTSEL mode. Serial port will disappear when successful.</span>
-            </div>
-
             <div class="status-section">
                 <div class="muted"><strong>Status:</strong> <span id="connect-status">Ready to connect</span></div>
             </div>
         </div>
 
-        <!-- Pane 2: Pick Drive -->
+        <!-- Pane 2: Start Bootloader -->
+        <div class="pane pane-disabled" id="pane-bootloader">
+            <h2>2. Start Bootloader</h2>
+            <p class="pane-step">Reboot device into BOOTSEL mode</p>
+
+            <div class="row">
+                <button id="btn-1200" disabled>Reboot to Bootloader</button>
+                <span class="muted">Serial port will disappear when successful.</span>
+            </div>
+
+            <div class="status-section">
+                <div class="muted"><strong>Status:</strong> <span id="bootloader-status">Waiting for device
+                        connection...</span></div>
+            </div>
+        </div>
+
+        <!-- Pane 3: Pick Drive -->
         <div class="pane pane-disabled" id="pane-drive">
-            <h2>2. Confirm/Pick Drive</h2>
+            <h2>3. Confirm/Pick Drive</h2>
             <p class="pane-step">After reboot, device appears as RPI-RP2 drive</p>
 
             <div class="row">
@@ -271,9 +288,9 @@
             </div>
         </div>
 
-        <!-- Pane 3: Upload Firmware -->
+        <!-- Pane 4: Upload Firmware -->
         <div class="pane pane-disabled" id="pane-upload">
-            <h2>3. Upload Firmware</h2>
+            <h2>4. Upload Firmware</h2>
             <p class="pane-step">Select and upload UF2 firmware file</p>
 
             <div class="row">
@@ -331,9 +348,11 @@
 
         // Pane elements
         const paneConnect = document.getElementById('pane-connect');
+        const paneBootloader = document.getElementById('pane-bootloader');
         const paneDrive = document.getElementById('pane-drive');
         const paneUpload = document.getElementById('pane-upload');
         const connectStatus = document.getElementById('connect-status');
+        const bootloaderStatus = document.getElementById('bootloader-status');
         const driveStatus = document.getElementById('drive-status');
         const uploadStatus = document.getElementById('upload-status');
 
@@ -406,7 +425,26 @@
             paneConnect.classList.add('active');
             paneConnect.classList.remove('pane-disabled');
 
-            // Pane 2 (Drive) becomes active when port disconnects (allows picking drive)
+            // Pane 2 (Bootloader) becomes active when device is selected
+            // Stays available (not disabled) after reboot, but only "active" when device connected
+            if (selectedPort) {
+                paneBootloader.classList.remove('pane-disabled');
+                paneBootloader.classList.add('active');
+                touchBtn.disabled = false;
+            } else if (portDisconnected || rebootSuccessful) {
+                // After reboot, keep pane available but not active (not green)
+                paneBootloader.classList.remove('pane-disabled', 'active');
+                touchBtn.disabled = true;
+                // Clear button state colors so it shows as disabled but not error/success
+                touchBtn.classList.remove('state-success', 'state-error', 'state-busy');
+            } else {
+                // Before device is selected, pane is disabled
+                paneBootloader.classList.add('pane-disabled');
+                paneBootloader.classList.remove('active');
+                touchBtn.disabled = true;
+            }
+
+            // Pane 3 (Drive) becomes active when port disconnects (allows picking drive)
             // Success is only confirmed when RPI-RP2 drive is verified
             if (portDisconnected || rebootSuccessful) {
                 paneDrive.classList.remove('pane-disabled');
@@ -421,7 +459,7 @@
                 pickDriveBtn.disabled = true;
             }
 
-            // Pane 3 (Upload) becomes active when drive is selected
+            // Pane 4 (Upload) becomes active when drive is selected
             if (selectedDirectory) {
                 paneUpload.classList.remove('pane-disabled');
                 paneUpload.classList.add('active');
@@ -469,6 +507,15 @@
                 selectedDirectory = null;
                 uf2Blob = null;
                 uf2Name = '';
+                selectedPort = null; // Clear port so panes reset properly
+
+                // Reset pane states immediately
+                paneBootloader.classList.add('pane-disabled');
+                paneBootloader.classList.remove('active');
+                paneDrive.classList.add('pane-disabled');
+                paneDrive.classList.remove('active');
+                paneUpload.classList.add('pane-disabled');
+                paneUpload.classList.remove('active');
 
                 // Reset button states
                 touchBtn.classList.remove('state-busy', 'state-success', 'state-error');
@@ -487,6 +534,7 @@
                 pickBtn.classList.add('state-busy');
                 infoEl.classList.add('state-busy');
                 connectStatus.textContent = 'Selecting device...';
+                bootloaderStatus.textContent = 'Waiting for device connection...';
                 driveStatus.textContent = 'Waiting for reboot...';
                 uploadStatus.textContent = 'Waiting for drive selection...';
 
@@ -511,8 +559,8 @@
                 pickBtn.classList.add('state-success');
                 infoEl.classList.remove('state-busy');
                 infoEl.classList.add('state-success');
-                touchBtn.disabled = false;
                 connectStatus.textContent = 'Device connected';
+                bootloaderStatus.textContent = 'Ready to reboot';
 
                 // Update pane states to default
                 updatePaneStates();
@@ -556,7 +604,7 @@
             // Visual feedback immediately, even during device selection
             touchBtn.classList.remove('state-success', 'state-error');
             touchBtn.classList.add('state-busy');
-            connectStatus.textContent = 'Rebooting to bootloader...';
+            bootloaderStatus.textContent = 'Rebooting to bootloader...';
 
             if (!selectedPort) {
                 // Also show busy state on the Pick Device button to hint at selection
@@ -566,7 +614,7 @@
                 pickBtn.classList.remove('state-busy');
                 if (!selectedPort) {
                     touchBtn.classList.remove('state-busy');
-                    connectStatus.textContent = 'No device selected';
+                    bootloaderStatus.textContent = 'No device selected';
                     return;
                 }
             }
@@ -627,7 +675,7 @@
                         setInfo('Port disconnected - verify drive');
                         touchBtn.classList.remove('state-busy');
                         touchBtn.classList.add('state-success');
-                        connectStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                        bootloaderStatus.textContent = 'Reboot successful - port disconnected';
                         portDisconnected = true;
                         rebootSuccessful = false; // Not confirmed until drive is picked
                         updatePaneStates();
@@ -636,7 +684,7 @@
                         toast('Port still present. Device may not be in bootloader mode.', 'error');
                         touchBtn.classList.remove('state-busy');
                         touchBtn.classList.add('state-error');
-                        connectStatus.textContent = 'Touch completed but port still present';
+                        bootloaderStatus.textContent = 'Port still present - reboot may have failed';
                         portDisconnected = false;
                         rebootSuccessful = false;
                         updatePaneStates();
@@ -654,7 +702,7 @@
                     setInfo('Port disconnected - verify drive');
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-success');
-                    connectStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                    bootloaderStatus.textContent = 'Reboot successful - port disconnected';
                     portDisconnected = true;
                     rebootSuccessful = false; // Not confirmed until drive is picked
                     updatePaneStates();
@@ -663,7 +711,7 @@
                     toast('Failed to open at 1200 bps or toggle signals.', 'error');
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-error');
-                    connectStatus.textContent = 'Reboot failed';
+                    bootloaderStatus.textContent = 'Reboot failed';
                     portDisconnected = false;
                     rebootSuccessful = false;
                 }
@@ -767,7 +815,7 @@
                     toast('RPI-RP2 drive selected and verified. Reboot to bootloader confirmed!', 'success');
                     // NOW we can confirm reboot was successful
                     rebootSuccessful = true;
-                    connectStatus.textContent = 'Reboot confirmed - RPI-RP2 verified';
+                    bootloaderStatus.textContent = 'Reboot confirmed - RPI-RP2 verified';
                     touchBtn.classList.add('state-success');
                 } else {
                     setDrive('Picked (unverified)');
@@ -777,7 +825,7 @@
                     driveStatus.textContent = 'Drive picked but not verified';
                     toast('Warning: Selected drive does not appear to be RPI-RP2. Reboot may not have succeeded.', 'error');
                     rebootSuccessful = false;
-                    connectStatus.textContent = 'Drive not verified - reboot may have failed';
+                    bootloaderStatus.textContent = 'Drive not verified - reboot may have failed';
                 }
                 pickDriveBtn.classList.remove('state-busy');
                 pickDriveBtn.classList.add('state-success');
@@ -844,7 +892,7 @@
                     setInfo('Port disconnected - verify drive');
                     touchBtn.classList.remove('state-busy', 'state-error');
                     touchBtn.classList.add('state-success');
-                    connectStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                    bootloaderStatus.textContent = 'Reboot successful - port disconnected';
                     expectingReboot = false;
                     portDisconnected = true;
                     rebootSuccessful = false; // Not confirmed until drive is picked
