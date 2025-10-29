@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RP2040 Boot Mode Test (Web Serial) v1.0</title>
+    <title>RP2040 Boot Mode Test (Web Serial) v1.1</title>
     <style>
         :root {
             color-scheme: light dark;
@@ -21,8 +21,61 @@
             margin: 0 0 1rem;
         }
 
+        .workflow-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .workflow-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .pane {
+            border: 2px solid #8884;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            background: #fafafa;
+            transition: opacity 0.3s ease, border-color 0.3s ease;
+        }
+
+        .pane:disabled,
+        .pane.pane-disabled {
+            opacity: 0.5;
+            border-color: #8882;
+            pointer-events: none;
+        }
+
+        .pane.active {
+            border-color: #2e7d32;
+            background: #f1f8f4;
+        }
+
+        .pane h2 {
+            margin: 0 0 1rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .pane-step {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+
         .row {
             display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .row-horizontal {
+            display: flex;
+            flex-direction: row;
             flex-wrap: wrap;
             gap: 0.75rem;
             align-items: center;
@@ -30,12 +83,13 @@
         }
 
         button {
-            padding: 0.5rem 0.9rem;
+            padding: 0.6rem 1rem;
             border-radius: 0.5rem;
             border: 1px solid #8885;
             background: #eee;
             cursor: pointer;
             transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+            font-size: 0.95rem;
         }
 
         button:disabled {
@@ -55,14 +109,17 @@
 
         input,
         select {
-            padding: 0.4rem 0.5rem;
+            padding: 0.5rem;
             border-radius: 0.4rem;
             border: 1px solid #8885;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .muted {
-            opacity: 0.8;
-            font-size: 0.95rem;
+            opacity: 0.7;
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
         }
 
         pre {
@@ -71,14 +128,16 @@
             border-radius: 0.5rem;
             max-height: 40vh;
             overflow: auto;
+            font-size: 0.85rem;
         }
 
         .badge {
-            padding: 0.15rem 0.5rem;
+            padding: 0.25rem 0.6rem;
             border-radius: 999px;
             background: #8882;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             border: 1px solid #8884;
+            display: inline-block;
         }
 
         /* Button feedback states */
@@ -97,26 +156,20 @@
             border-color: #c62828;
         }
 
-        /* Badge state variants for UF2 info */
-        #uf2-info.state-success {
+        /* Badge state variants */
+        .badge.state-success {
             background: #b7efc5;
             border-color: #2e7d32;
         }
 
-        #uf2-info.state-error {
+        .badge.state-error {
             background: #ffb3b3;
             border-color: #c62828;
         }
 
-        /* Badge variants for drive info */
-        #drive-info.state-success {
-            background: #b7efc5;
-            border-color: #2e7d32;
-        }
-
-        #drive-info.state-error {
-            background: #ffb3b3;
-            border-color: #c62828;
+        .badge.state-busy {
+            background: #ffe49c;
+            border-color: #cfaa2a;
         }
 
         /* Toast notifications */
@@ -154,72 +207,104 @@
             background: #455a64;
             border-color: #455a64;
         }
+
+        .status-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #ccc;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+        }
+
+        input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
     </style>
 </head>
 
 <body>
-    <h1>RP2040 Boot Mode Test (Web Serial) <span class="badge">v1.0</span></h1>
+    <h1>RP2040 Firmware Uploader <span class="badge">v1.1</span></h1>
 
-    <p class="muted">
+    <p class="muted" style="margin-bottom: 1.5rem;">
         Use Chrome or Edge (Web Serial required). Safari currently does not support Web Serial.
     </p>
 
-    <div class="row">
-        <button id="btn-pick">Pick device</button>
-        <span id="port-info" class="badge">No device selected</span>
+    <div class="workflow-container">
+        <!-- Pane 1: Connect Device -->
+        <div class="pane active" id="pane-connect">
+            <h2>1. Connect Device</h2>
+            <p class="pane-step">Select your RP2040 device via serial port</p>
+
+            <div class="row">
+                <button id="btn-pick">Pick Device</button>
+                <span id="port-info" class="badge">No device selected</span>
+            </div>
+
+            <div class="row">
+                <button id="btn-1200" disabled>Reboot to Bootloader</button>
+                <span class="muted">Reboots device into BOOTSEL mode. Serial port will disappear when successful.</span>
+            </div>
+
+            <div class="status-section">
+                <div class="muted"><strong>Status:</strong> <span id="connect-status">Ready to connect</span></div>
+            </div>
+        </div>
+
+        <!-- Pane 2: Pick Drive -->
+        <div class="pane pane-disabled" id="pane-drive">
+            <h2>2. Confirm/Pick Drive</h2>
+            <p class="pane-step">After reboot, device appears as RPI-RP2 drive</p>
+
+            <div class="row">
+                <button id="btn-pick-drive" disabled>Pick RPI-RP2 Drive</button>
+                <span id="drive-info" class="badge">No drive selected</span>
+            </div>
+
+            <div class="status-section">
+                <div class="muted"><strong>Status:</strong> <span id="drive-status">Waiting for reboot...</span></div>
+            </div>
+        </div>
+
+        <!-- Pane 3: Upload Firmware -->
+        <div class="pane pane-disabled" id="pane-upload">
+            <h2>3. Upload Firmware</h2>
+            <p class="pane-step">Select and upload UF2 firmware file</p>
+
+            <div class="row">
+                <button id="btn-uf2">Select UF2 File</button>
+                <input id="file-uf2" type="file" accept=".uf2" style="display:none" />
+                <span id="uf2-info" class="badge">No file selected</span>
+            </div>
+
+            <div class="row">
+                <input id="uf2-url" type="url" placeholder="Or enter UF2 URL..." />
+            </div>
+
+            <div class="row">
+                <button id="btn-fetch-uf2">Fetch from URL</button>
+                <span id="url-info" class="badge" style="display:none;"></span>
+            </div>
+
+            <div class="row">
+                <button id="btn-write-uf2" disabled>Write UF2 to Drive</button>
+                <span id="write-ready" class="badge">Not ready</span>
+            </div>
+
+            <div class="status-section">
+                <div class="muted"><strong>Status:</strong> <span id="upload-status">Waiting for drive
+                        selection...</span></div>
+            </div>
+        </div>
     </div>
 
-    <div class="row">
-        <button id="btn-1200">Try 1200-bps touch</button>
-        <span class="muted">Opens the selected serial device at 1200 bps, toggles DTR/RTS, then closes. Requires
-            firmware/bootloader support.</span>
-    </div>
-
-    <fieldset style="border:1px solid #8884; padding: 0.75rem 1rem; border-radius: 0.5rem; margin: 1rem 0;">
-        <legend>Send custom reboot command (firmware-defined)</legend>
-        <div class="row">
-            <label>Baud:
-                <input id="baud-input" type="number" value="115200" min="1200" step="100" style="width: 8rem;" />
-            </label>
-            <label>Command:
-                <input id="cmd-input" type="text" placeholder="e.g. BOOTSEL or REBOOT-BOOTSEL" size="28" />
-            </label>
-            <label><input id="chk-cr" type="checkbox" checked /> Append CR (\r)</label>
-            <label><input id="chk-lf" type="checkbox" /> Append LF (\n)</label>
-            <button id="btn-send">Open & send</button>
-            <button id="btn-close" disabled>Close port</button>
-        </div>
-        <div class="muted">Your firmware must listen for this command and call reset_usb_boot().</div>
-    </fieldset>
-
-    <fieldset style="border:1px solid #8884; padding: 0.75rem 1rem; border-radius: 0.5rem; margin: 1rem 0;">
-        <legend>Program UF2 to RPI-RP2 (Chrome/Edge)</legend>
-        <div class="row">
-            <button id="btn-uf2">Select UF2 file…</button>
-            <input id="file-uf2" type="file" accept=".uf2" style="display:none" />
-            <span id="uf2-info" class="badge">No file selected</span>
-        </div>
-        <div class="row">
-            <input id="uf2-url" type="url" placeholder="https://example.com/firmware.uf2" size="48" />
-            <button id="btn-fetch-uf2">Fetch from URL</button>
-            <span id="url-info" class="badge">Optional</span>
-        </div>
-        <div class="row">
-            <button id="btn-pick-drive">Pick RPI-RP2 drive…</button>
-            <span id="drive-info" class="badge">No drive selected</span>
-        </div>
-        <div class="row">
-            <button id="btn-write-uf2" disabled>Write UF2 to drive</button>
-            <span id="write-ready" class="badge">Not ready</span>
-        </div>
-        <div class="muted">Writes the UF2 to the selected drive. The board will reboot and the drive will disappear
-            after copy.</div>
-    </fieldset>
-
-    <div class="row">
-        <button id="btn-clear">Clear log</button>
-        <span class="muted">After a successful reboot to BOOTSEL, the device will disconnect and re-enumerate as a
-            mass-storage device (RPI-RP2).</span>
+    <div class="row-horizontal" style="margin-top: 1.5rem; margin-bottom: 1rem;">
+        <button id="btn-clear">Clear Log</button>
     </div>
 
     <pre id="log" aria-live="polite"></pre>
@@ -231,12 +316,6 @@
         const pickBtn = document.getElementById('btn-pick');
         const infoEl = document.getElementById('port-info');
         const touchBtn = document.getElementById('btn-1200');
-        const sendBtn = document.getElementById('btn-send');
-        const closeBtn = document.getElementById('btn-close');
-        const baudInput = document.getElementById('baud-input');
-        const cmdInput = document.getElementById('cmd-input');
-        const chkCR = document.getElementById('chk-cr');
-        const chkLF = document.getElementById('chk-lf');
         const clearBtn = document.getElementById('btn-clear');
         const pickUf2Btn = document.getElementById('btn-uf2');
         const fileUf2Input = document.getElementById('file-uf2');
@@ -250,11 +329,21 @@
         const writeReady = document.getElementById('write-ready');
         const toasts = document.getElementById('toasts');
 
+        // Pane elements
+        const paneConnect = document.getElementById('pane-connect');
+        const paneDrive = document.getElementById('pane-drive');
+        const paneUpload = document.getElementById('pane-upload');
+        const connectStatus = document.getElementById('connect-status');
+        const driveStatus = document.getElementById('drive-status');
+        const uploadStatus = document.getElementById('upload-status');
+
         let selectedPort = null;
         let isOpen = false;
         let selectedDirectory = null; // RPI-RP2 directory handle
         let uf2Blob = null;           // Chosen UF2 content
         let uf2Name = '';             // Name to write on the drive
+        let expectingReboot = false;  // True during/after 1200-bps touch
+        let rebootSuccessful = false;  // True when reboot to bootloader succeeded
 
         function log(message) {
             const ts = new Date().toLocaleTimeString();
@@ -301,6 +390,41 @@
             writeReady.textContent = ready ? 'Ready' : 'Not ready';
             writeReady.classList.toggle('state-success', ready);
             writeReady.classList.toggle('state-error', !ready);
+            writeUf2Btn.disabled = !ready;
+
+            if (ready) {
+                uploadStatus.textContent = 'Ready to upload';
+            } else {
+                uploadStatus.textContent = 'Select UF2 file' + (selectedDirectory ? '' : ' and drive');
+            }
+        }
+
+        function updatePaneStates() {
+            // Pane 1 (Connect) is always active
+            paneConnect.classList.add('active');
+            paneConnect.classList.remove('pane-disabled');
+
+            // Pane 2 (Drive) becomes active after successful reboot
+            if (rebootSuccessful) {
+                paneDrive.classList.remove('pane-disabled');
+                paneDrive.classList.add('active');
+                pickDriveBtn.disabled = false;
+                driveStatus.textContent = 'Ready to pick drive';
+            } else {
+                paneDrive.classList.add('pane-disabled');
+                paneDrive.classList.remove('active');
+                pickDriveBtn.disabled = true;
+            }
+
+            // Pane 3 (Upload) becomes active when drive is selected
+            if (selectedDirectory) {
+                paneUpload.classList.remove('pane-disabled');
+                paneUpload.classList.add('active');
+            } else {
+                paneUpload.classList.add('pane-disabled');
+                paneUpload.classList.remove('active');
+                writeUf2Btn.disabled = true;
+            }
         }
 
         function toast(message, type = 'info', timeoutMs = 3000) {
@@ -338,15 +462,20 @@
                 pickBtn.classList.add('state-busy');
                 infoEl.classList.remove('state-success', 'state-error');
                 infoEl.classList.add('state-busy');
+                connectStatus.textContent = 'Selecting device...';
+
                 const port = await navigator.serial.requestPort();
                 selectedPort = port;
                 setInfo(describePort(port));
                 log('Device selected: ' + describePort(port));
+
                 // Success feedback
                 pickBtn.classList.remove('state-busy');
                 pickBtn.classList.add('state-success');
                 infoEl.classList.remove('state-busy');
                 infoEl.classList.add('state-success');
+                touchBtn.disabled = false;
+                connectStatus.textContent = 'Device connected';
             } catch (e) {
                 log('Device selection cancelled or failed.');
                 console.error(e);
@@ -354,6 +483,7 @@
                 pickBtn.classList.remove('state-busy', 'state-success');
                 pickBtn.classList.add('state-error');
                 infoEl.classList.remove('state-busy', 'state-success');
+                connectStatus.textContent = 'Selection cancelled';
             }
         }
 
@@ -362,7 +492,6 @@
                 if (selectedPort && isOpen) {
                     await selectedPort.close();
                     isOpen = false;
-                    closeBtn.disabled = true;
                     log('Port closed.');
                 }
             } catch (e) {
@@ -386,6 +515,8 @@
             // Visual feedback immediately, even during device selection
             touchBtn.classList.remove('state-success', 'state-error');
             touchBtn.classList.add('state-busy');
+            connectStatus.textContent = 'Rebooting to bootloader...';
+
             if (!selectedPort) {
                 // Also show busy state on the Pick Device button to hint at selection
                 pickBtn.classList.remove('state-success', 'state-error');
@@ -394,91 +525,98 @@
                 pickBtn.classList.remove('state-busy');
                 if (!selectedPort) {
                     touchBtn.classList.remove('state-busy');
+                    connectStatus.textContent = 'No device selected';
                     return;
                 }
             }
             await ensureClosed();
+            expectingReboot = true;
             try {
                 log('Opening at 1200 bps...');
                 await selectedPort.open({ baudRate: 1200 });
                 isOpen = true;
-                closeBtn.disabled = false;
 
                 // Some implementations watch DTR/RTS transitions
+                // Try to toggle signals, but don't fail if it's not supported or errors
                 if (selectedPort.setSignals) {
-                    await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
-                    await sleep(20);
-                    await selectedPort.setSignals({ dataTerminalReady: true, requestToSend: false });
-                    await sleep(20);
-                    await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+                    try {
+                        await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+                        await sleep(20);
+                        await selectedPort.setSignals({ dataTerminalReady: true, requestToSend: false });
+                        await sleep(20);
+                        await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+                    } catch (sigErr) {
+                        // setSignals may fail on some systems, but the 1200-bps touch itself may still work
+                        log('Note: Signal toggle failed (device may still reboot): ' + (sigErr?.message || sigErr));
+                    }
                 }
 
                 // Close promptly; device should reset if it supports the 1200-bps touch
                 await selectedPort.close();
                 isOpen = false;
-                closeBtn.disabled = true;
-                log('Closed after 1200-bps touch. If supported, device should reboot to bootloader.');
-                toast('If supported, the device should now be in BOOTSEL/UF2 mode.', 'success');
-                touchBtn.classList.remove('state-busy');
-                touchBtn.classList.add('state-success');
+
+                // Give the device a moment to reboot and disappear
+                await sleep(100);
+
+                // Check if the port is still available - if it disappeared, reboot was successful
+                let portStillExists = false;
+                try {
+                    // Try to access port info - if port disappeared, this might fail or the port object becomes invalid
+                    selectedPort.getInfo();
+                    portStillExists = true;
+                } catch {
+                    portStillExists = false;
+                }
+
+                if (!portStillExists) {
+                    // Port disappeared = successful reboot to BOOTSEL!
+                    log('Serial port disappeared - reboot successful! Device should now appear as RPI-RP2 drive.');
+                    toast('Reboot successful! Serial port disappeared. Look for RPI-RP2 drive.', 'success');
+                    selectedPort = null;
+                    setInfo('Device rebooted (port disappeared)');
+                    touchBtn.classList.remove('state-busy');
+                    touchBtn.classList.add('state-success');
+                    connectStatus.textContent = 'Reboot successful - port disappeared';
+                    rebootSuccessful = true;
+                    updatePaneStates();
+                } else {
+                    log('Closed after 1200-bps touch. If device reboots, the serial port will disappear and RPI-RP2 will mount.');
+                    toast('1200-bps touch completed. Check if serial port disappears (success) or RPI-RP2 mounts.', 'info');
+                    touchBtn.classList.remove('state-busy');
+                    touchBtn.classList.add('state-success');
+                    connectStatus.textContent = 'Touch completed - waiting for port disconnect';
+                    // Still enable pane 2 in case device reboots
+                    rebootSuccessful = true;
+                    updatePaneStates();
+                }
             } catch (e) {
                 console.error(e);
                 if (isLikelyRebootError(e)) {
-                    // Treat disconnect during touch as success — device likely rebooted into BOOTSEL
+                    // Port disconnected during operation = successful reboot!
                     isOpen = false;
-                    closeBtn.disabled = true;
-                    log('Device disconnected during 1200-bps touch (expected). Likely rebooted to BOOTSEL.');
-                    toast('Device likely rebooted to BOOTSEL/UF2. If RPI-RP2 mounted, you are good.', 'success');
+                    log('Serial port disappeared during 1200-bps touch - reboot successful! Device should now appear as RPI-RP2 drive.');
+                    toast('Reboot successful! Serial port disappeared. Look for RPI-RP2 drive.', 'success');
+                    selectedPort = null;
+                    setInfo('Device rebooted (port disappeared)');
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-success');
+                    connectStatus.textContent = 'Reboot successful - port disappeared';
+                    rebootSuccessful = true;
+                    updatePaneStates();
                 } else {
                     log('1200-bps touch failed: ' + (e?.message || e));
                     toast('Failed to open at 1200 bps or toggle signals.', 'error');
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-error');
+                    connectStatus.textContent = 'Reboot failed';
                 }
+            } finally {
+                expectingReboot = false;
             }
-        }
-
-        async function openAndSendCommand() {
-            if (!selectedPort) {
-                await pickDevice();
-                if (!selectedPort) return;
-            }
-
-            const baud = parseInt(baudInput.value || '115200', 10);
-            const raw = cmdInput.value || '';
-            const suffix = (chkCR.checked ? '\r' : '') + (chkLF.checked ? '\n' : '');
-            const payload = raw + suffix;
-
-            await ensureClosed();
-            try {
-                log(`Opening at ${baud} bps...`);
-                await selectedPort.open({ baudRate: baud });
-                isOpen = true;
-                closeBtn.disabled = false;
-
-                const writer = selectedPort.writable.getWriter();
-                const enc = new TextEncoder();
-                const data = enc.encode(payload);
-                await writer.write(data);
-                writer.releaseLock();
-                log(`Sent ${data.length} bytes: ${JSON.stringify(payload)}`);
-                log('If firmware listens for this command, it may now call reset_usb_boot().');
-            } catch (e) {
-                console.error(e);
-                log('Send failed: ' + (e?.message || e));
-            }
-        }
-
-        async function closePort() {
-            await ensureClosed();
         }
 
         pickBtn.addEventListener('click', pickDevice);
         touchBtn.addEventListener('click', do1200BpsTouch);
-        sendBtn.addEventListener('click', openAndSendCommand);
-        closeBtn.addEventListener('click', closePort);
         clearBtn.addEventListener('click', () => { logEl.textContent = ''; });
 
         // ===== UF2 programming helpers =====
@@ -502,7 +640,6 @@
             } catch (e) {
                 log('UF2 selection cancelled.');
             }
-            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
             updateWriteReadyBadge();
         }
 
@@ -517,7 +654,6 @@
                 uf2Info.classList.remove('state-error');
                 log('UF2 selected: ' + uf2Name);
             }
-            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
             updateWriteReadyBadge();
         });
 
@@ -526,6 +662,8 @@
             if (!url) { alert('Enter a UF2 URL first.'); return; }
             try {
                 urlInfo.textContent = 'Fetching…';
+                urlInfo.style.display = 'inline-block';
+                uploadStatus.textContent = 'Fetching firmware...';
                 const res = await fetch(url, { cache: 'no-cache' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const blob = await res.blob();
@@ -535,15 +673,17 @@
                 uf2Info.classList.add('state-success');
                 uf2Info.classList.remove('state-error');
                 urlInfo.textContent = 'Fetched';
+                urlInfo.classList.add('state-success');
                 log('UF2 fetched from URL: ' + uf2Name);
             } catch (e) {
                 console.error(e);
                 urlInfo.textContent = 'Fetch failed';
+                urlInfo.classList.remove('state-success');
+                urlInfo.classList.add('state-error');
                 toast('Failed to fetch UF2: ' + (e?.message || e), 'error');
                 uf2Info.classList.remove('state-success');
                 uf2Info.classList.add('state-error');
             }
-            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
             updateWriteReadyBadge();
         }
         fetchUf2Btn.addEventListener('click', fetchUf2FromUrl);
@@ -551,6 +691,9 @@
         async function pickDrive() {
             if (!window.showDirectoryPicker) { toast('Your browser does not support the File System Access API (use Chrome/Edge).', 'error'); return; }
             try {
+                pickDriveBtn.classList.remove('state-success', 'state-error');
+                pickDriveBtn.classList.add('state-busy');
+                driveStatus.textContent = 'Selecting drive...';
                 const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
                 selectedDirectory = dir;
                 setDrive('Picked');
@@ -559,20 +702,28 @@
                 try { await dir.getFileHandle('INFO_UF2.TXT'); likely = true; } catch { }
                 try { await dir.getFileHandle('INDEX.HTM'); likely = true; } catch { }
                 if (likely) {
-                    setDrive('RPI-RP2 (likely)');
+                    setDrive('RPI-RP2 (verified)');
                     driveInfo.classList.add('state-success');
                     driveInfo.classList.remove('state-error');
                     log('UF2 markers found: this looks like the RPI-RP2 drive.');
+                    driveStatus.textContent = 'Drive verified - RPI-RP2 detected';
+                    toast('RPI-RP2 drive selected and verified.', 'success');
                 } else {
-                    setDrive('Picked (unknown volume)');
+                    setDrive('Picked (unverified)');
                     driveInfo.classList.remove('state-success');
                     driveInfo.classList.add('state-error');
                     log('UF2 markers not found. Ensure you selected the root of the RPI-RP2 drive.');
+                    driveStatus.textContent = 'Drive picked but not verified';
+                    toast('Warning: Selected drive does not appear to be RPI-RP2.', 'error');
                 }
+                pickDriveBtn.classList.remove('state-busy');
+                pickDriveBtn.classList.add('state-success');
             } catch (e) {
                 log('Drive selection cancelled.');
+                pickDriveBtn.classList.remove('state-busy');
+                driveStatus.textContent = 'Selection cancelled';
             }
-            writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
+            updatePaneStates();
             updateWriteReadyBadge();
         }
         pickDriveBtn.addEventListener('click', pickDrive);
@@ -583,6 +734,7 @@
                 writeUf2Btn.disabled = true;
                 writeUf2Btn.classList.remove('state-success', 'state-error');
                 writeUf2Btn.classList.add('state-busy');
+                uploadStatus.textContent = 'Writing firmware...';
                 const fileHandle = await selectedDirectory.getFileHandle(uf2Name || 'firmware.uf2', { create: true });
                 const writable = await fileHandle.createWritable();
                 const buf = await uf2Blob.arrayBuffer();
@@ -591,11 +743,16 @@
                 await writable.close();
                 log('Write complete. Device should reboot and the drive may disappear.');
                 toast('UF2 written. The device should reboot now.', 'success');
+                uploadStatus.textContent = 'Firmware uploaded successfully!';
+                writeUf2Btn.classList.remove('state-busy');
+                writeUf2Btn.classList.add('state-success');
             } catch (e) {
                 console.error(e);
                 toast('Failed to write UF2: ' + explainFsWriteError(e), 'error');
+                uploadStatus.textContent = 'Upload failed';
+                writeUf2Btn.classList.remove('state-busy');
+                writeUf2Btn.classList.add('state-error');
             } finally {
-                writeUf2Btn.disabled = !(uf2Blob && selectedDirectory);
                 updateWriteReadyBadge();
             }
         }
@@ -605,6 +762,7 @@
         if (!('serial' in navigator)) {
             setInfo('Web Serial not available');
             log('Web Serial not available. Use Chrome/Edge.');
+            connectStatus.textContent = 'Web Serial not available';
         }
 
         // Log connect/disconnect to make reboot behavior clearer
@@ -614,7 +772,22 @@
             });
             navigator.serial.addEventListener('disconnect', (e) => {
                 if (selectedPort && e.port === selectedPort) {
-                    log('Selected device disconnected (likely reboot).');
+                    if (expectingReboot) {
+                        // Port disappeared after 1200-bps touch = successful reboot!
+                        log('Serial port disappeared - reboot successful! Device should now appear as RPI-RP2 drive.');
+                        toast('Reboot successful! Serial port disappeared. Look for RPI-RP2 drive.', 'success');
+                        selectedPort = null;
+                        isOpen = false;
+                        setInfo('Device rebooted (port disappeared)');
+                        touchBtn.classList.remove('state-busy', 'state-error');
+                        touchBtn.classList.add('state-success');
+                        connectStatus.textContent = 'Reboot successful - port disappeared';
+                        expectingReboot = false;
+                        rebootSuccessful = true;
+                        updatePaneStates();
+                    } else {
+                        log('Selected device disconnected (likely reboot).');
+                    }
                 } else {
                     try { log('Serial device disconnected: ' + describePort(e.port)); } catch { log('Serial device disconnected.'); }
                 }
@@ -623,13 +796,14 @@
 
         // File System Access capability notes
         if (!window.isSecureContext) {
-            log('Warning: Not a secure context. File System Access may be limited. Use https or localhost.');
+            log('Warning: Not a secure context. File System Access may be limited. Use https or http://localhost.');
         }
         if (!window.showDirectoryPicker) {
             log('File System Access API not available. UF2 writing requires Chrome/Edge.');
         }
 
-        // Initial badge state
+        // Initial pane states
+        updatePaneStates();
         updateWriteReadyBadge();
     </script>
 </body>
