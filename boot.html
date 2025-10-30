@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RP2040 Boot to Bootloader</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 2rem;
+            line-height: 1.4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            margin: 0 0 2rem;
+        }
+
+        button {
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            border: 1px solid #64b5f6;
+            background: #e3f2fd;
+            cursor: pointer;
+            transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.state-busy,
+        button.state-success,
+        button.state-error,
+        button.state-busy:disabled,
+        button.state-success:disabled,
+        button.state-error:disabled {
+            opacity: 1;
+        }
+
+        .state-busy {
+            background: #ffe49c;
+            border-color: #cfaa2a;
+        }
+
+        .state-success {
+            background: #b7efc5;
+            border-color: #2e7d32;
+        }
+
+        .state-error {
+            background: #ffb3b3;
+            border-color: #c62828;
+        }
+
+        .status {
+            margin-top: 1.5rem;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            background: #f5f5f5;
+            min-width: 300px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .muted {
+            opacity: 0.7;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
+        /* Toast notifications */
+        #toasts {
+            position: fixed;
+            right: 1rem;
+            bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 9999;
+        }
+
+        .toast {
+            padding: 0.6rem 0.8rem;
+            border-radius: 0.5rem;
+            border: 1px solid #8884;
+            background: #333;
+            color: #fff;
+            box-shadow: 0 2px 10px #0004;
+            max-width: 60ch;
+        }
+
+        .toast.success {
+            background: #2e7d32;
+            border-color: #2e7d32;
+        }
+
+        .toast.error {
+            background: #c62828;
+            border-color: #c62828;
+        }
+
+        .toast.info {
+            background: #455a64;
+            border-color: #455a64;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>RP2040 Boot to Bootloader</h1>
+    <button id="btn-boot">Boot</button>
+    <div class="status" id="status">Ready. Click Boot to connect and reboot device.</div>
+    <p class="muted">Use Chrome or Edge (Web Serial required). Safari currently does not support Web Serial.</p>
+
+    <div id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+        const bootBtn = document.getElementById('btn-boot');
+        const statusEl = document.getElementById('status');
+        const toasts = document.getElementById('toasts');
+
+        let selectedPort = null;
+        let isOpen = false;
+        let expectingReboot = false;
+
+        function updateStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function toast(message, type = 'info', timeoutMs = 3000) {
+            try {
+                const el = document.createElement('div');
+                el.className = `toast ${type}`;
+                el.textContent = message;
+                toasts.appendChild(el);
+                setTimeout(() => { el.remove(); }, timeoutMs);
+            } catch { }
+        }
+
+        function requireWebSerial() {
+            if (!('serial' in navigator)) {
+                const msg = 'Web Serial API not available. Use Chrome/Edge and enable it if needed.';
+                alert(msg);
+                updateStatus(msg);
+                return false;
+            }
+            return true;
+        }
+
+        function describePort(port) {
+            try {
+                const info = port.getInfo?.() || {};
+                const usb = [];
+                if (info.usbVendorId != null) usb.push('vid=' + info.usbVendorId.toString(16));
+                if (info.usbProductId != null) usb.push('pid=' + info.usbProductId.toString(16));
+                return usb.length ? `USB(${usb.join(',')})` : 'Unknown interface';
+            } catch {
+                return 'Unknown interface';
+            }
+        }
+
+        async function ensureClosed() {
+            try {
+                if (selectedPort && isOpen) {
+                    await selectedPort.close();
+                    isOpen = false;
+                }
+            } catch (e) {
+                console.warn('ensureClosed error', e);
+            }
+        }
+
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        function isLikelyRebootError(e) {
+            const text = String(e?.message || e || '').toLowerCase();
+            return text.includes('device has been lost')
+                || text.includes('was disconnected')
+                || text.includes('transfer error')
+                || text.includes('pipe error')
+                || text.includes('operation timed out');
+        }
+
+        async function pickDevice() {
+            if (!requireWebSerial()) return false;
+            try {
+                const port = await navigator.serial.requestPort();
+                selectedPort = port;
+                updateStatus('Device selected: ' + describePort(port));
+                return true;
+            } catch (e) {
+                updateStatus('Device selection cancelled or failed.');
+                return false;
+            }
+        }
+
+        async function bootToBootloader() {
+            if (!requireWebSerial()) return;
+
+            // Visual feedback
+            bootBtn.classList.remove('state-success', 'state-error');
+            bootBtn.classList.add('state-busy');
+            bootBtn.disabled = true;
+            updateStatus('Connecting to device...');
+
+            // Pick device if not already selected
+            if (!selectedPort) {
+                updateStatus('Selecting device...');
+                const picked = await pickDevice();
+                if (!picked) {
+                    bootBtn.classList.remove('state-busy');
+                    bootBtn.classList.add('state-error');
+                    bootBtn.disabled = false;
+                    updateStatus('No device selected');
+                    return;
+                }
+            }
+
+            await ensureClosed();
+            expectingReboot = true;
+            updateStatus('Rebooting to bootloader...');
+
+            try {
+                await selectedPort.open({ baudRate: 1200 });
+                isOpen = true;
+
+                // Try to toggle signals for better compatibility
+                if (selectedPort.setSignals) {
+                    try {
+                        await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+                        await sleep(20);
+                        await selectedPort.setSignals({ dataTerminalReady: true, requestToSend: false });
+                        await sleep(20);
+                        await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+                    } catch (sigErr) {
+                        // Signal toggle may fail but 1200-bps touch should still work
+                        console.warn('Signal toggle failed:', sigErr);
+                    }
+                }
+
+                await selectedPort.close();
+                isOpen = false;
+
+                await sleep(500);
+
+                // Check if port disappeared (successful reboot)
+                let portStillExists = false;
+                try {
+                    if (selectedPort) {
+                        selectedPort.getInfo();
+                        portStillExists = true;
+                    }
+                } catch {
+                    portStillExists = false;
+                }
+
+                if (!portStillExists || !selectedPort) {
+                    updateStatus('Reboot successful! Serial port disconnected. RPI-RP2 drive should appear.');
+                    toast('Device rebooted to bootloader mode. RPI-RP2 drive should appear.', 'success');
+                    bootBtn.classList.remove('state-busy');
+                    bootBtn.classList.add('state-success');
+                    selectedPort = null;
+                } else {
+                    updateStatus('Port still present. Device may not have rebooted to bootloader.');
+                    toast('Port still present. Device may not be in bootloader mode.', 'error');
+                    bootBtn.classList.remove('state-busy');
+                    bootBtn.classList.add('state-error');
+                }
+            } catch (e) {
+                console.error(e);
+                if (isLikelyRebootError(e)) {
+                    // Port disconnected during operation - this is actually good!
+                    isOpen = false;
+                    updateStatus('Reboot successful! Serial port disconnected. RPI-RP2 drive should appear.');
+                    toast('Device rebooted to bootloader mode. RPI-RP2 drive should appear.', 'success');
+                    bootBtn.classList.remove('state-busy');
+                    bootBtn.classList.add('state-success');
+                    selectedPort = null;
+                } else {
+                    updateStatus('Reboot failed: ' + (e?.message || e));
+                    toast('Failed to reboot device.', 'error');
+                    bootBtn.classList.remove('state-busy');
+                    bootBtn.classList.add('state-error');
+                }
+            } finally {
+                expectingReboot = false;
+                bootBtn.disabled = false;
+            }
+        }
+
+        bootBtn.addEventListener('click', bootToBootloader);
+
+        // Handle disconnect events
+        if ('serial' in navigator) {
+            navigator.serial.addEventListener('disconnect', (e) => {
+                if (expectingReboot) {
+                    updateStatus('Reboot successful! Serial port disconnected. RPI-RP2 drive should appear.');
+                    toast('Device rebooted to bootloader mode. RPI-RP2 drive should appear.', 'success');
+                    selectedPort = null;
+                    isOpen = false;
+                    expectingReboot = false;
+                    bootBtn.classList.remove('state-busy', 'state-error');
+                    bootBtn.classList.add('state-success');
+                    bootBtn.disabled = false;
+                } else if (selectedPort && e.port === selectedPort) {
+                    updateStatus('Device disconnected.');
+                    selectedPort = null;
+                    isOpen = false;
+                }
+            });
+        }
+
+        // Initial capability check
+        if (!('serial' in navigator)) {
+            updateStatus('Web Serial not available. Use Chrome/Edge.');
+            bootBtn.disabled = true;
+        }
+    </script>
+</body>
+
+</html>
