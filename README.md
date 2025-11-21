@@ -18,7 +18,19 @@ This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` f
    - Click **Select UF2 File** (or enter a **URL** and click **Fetch from URL**).
    - Click **Write UF2 to Drive**. The board will reboot when the copy completes.
 
-**Alternative**: After **Step 2**, if you prefer to drag and drop manually, you can skip steps 3-4. Once the RPI-RP2 drive appears on your computer, simply drag your `.uf2` file onto the drive - it will automatically reboot when the file is copied.
+### Alternative: Just Boot (Simpler)
+
+![Just Boot Interface](justboot.png)
+
+For a minimal approach, use `just_boot.html`. This tool only triggers bootloader entry via the 1200-bps touch method. After the device reboots, you manually drag the `.uf2` file to the mounted drive.
+
+**Works with**: RP2040 and SAMD21 devices.
+
+**Usage**:
+1. Open `just_boot.html` in Chrome/Edge.
+2. Click **Boot to Bootloader** and select your device.
+3. Wait for the bootloader drive to appear (RPI-RP2 for RP2040, or your SAMD21 bootloader drive).
+4. Manually drag your `.uf2` file to the drive.
 
 ### Notes
 - This tool does not require hardware BOOT/SEL access, but your current firmware must support the **1200‑bps touch** reset convention.

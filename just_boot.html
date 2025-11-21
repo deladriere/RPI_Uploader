@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bootloader Entry</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 2rem;
+            line-height: 1.4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            margin: 0 0 2rem;
+        }
+
+        button {
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            border: 1px solid #64b5f6;
+            background: #e3f2fd;
+            cursor: pointer;
+            transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.state-busy,
+        button.state-success,
+        button.state-error,
+        button.state-busy:disabled,
+        button.state-success:disabled,
+        button.state-error:disabled {
+            opacity: 1;
+        }
+
+        .state-busy {
+            background: #ffe49c;
+            border-color: #cfaa2a;
+        }
+
+        .state-success {
+            background: #b7efc5;
+            border-color: #2e7d32;
+        }
+
+        .state-error {
+            background: #ffb3b3;
+            border-color: #c62828;
+        }
+
+        .status {
+            margin-top: 1.5rem;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            background: #f5f5f5;
+            min-width: 300px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .muted {
+            opacity: 0.7;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
+        /* Toast notifications */
+        #toasts {
+            position: fixed;
+            right: 1rem;
+            bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 9999;
+        }
+
+        .toast {
+            padding: 0.6rem 0.8rem;
+            border-radius: 0.5rem;
+            border: 1px solid #8884;
+            background: #333;
+            color: #fff;
+            box-shadow: 0 2px 10px #0004;
+            max-width: 60ch;
+        }
+
+        .toast.success {
+            background: #2e7d32;
+            border-color: #2e7d32;
+        }
+
+        .toast.error {
+            background: #c62828;
+            border-color: #c62828;
+        }
+
+        .toast.info {
+            background: #455a64;
+            border-color: #455a64;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Bootloader Entry</h1>
+    <button id="btn-boot">Boot to Bootloader</button>
+    <div class="status" id="status">Ready. Click button to connect and enter bootloader mode.</div>
+    <p class="muted">Use Chrome or Edge (Web Serial required). Safari does not support Web Serial.</p>
+
+    <div id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+        const bootBtn = document.getElementById('btn-boot');
+        const statusEl = document.getElementById('status');
+        const toasts = document.getElementById('toasts');
+
+        let selectedPort = null;
+
+        function updateStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function toast(message, type = 'info', timeoutMs = 3000) {
+            try {
+                const el = document.createElement('div');
+                el.className = `toast ${type}`;
+                el.textContent = message;
+                toasts.appendChild(el);
+                setTimeout(() => { el.remove(); }, timeoutMs);
+            } catch { }
+        }
+
+        function requireWebSerial() {
+            if (!('serial' in navigator)) {
+                const msg = 'Web Serial API not available. Use Chrome/Edge.';
+                alert(msg);
+                updateStatus(msg);
+                return false;
+            }
+            return true;
+        }
+
+        async function pickDevice() {
+            if (!requireWebSerial()) return false;
+            try {
+                const port = await navigator.serial.requestPort();
+                selectedPort = port;
+                updateStatus('Device selected.');
+                return true;
+            } catch (e) {
+                updateStatus('Device selection cancelled.');
+                return false;
+            }
+        }
+
+        async function bootToBootloader() {
+            if (!requireWebSerial()) return;
+
+            bootBtn.classList.remove('state-success', 'state-error');
+            bootBtn.classList.add('state-busy');
+            bootBtn.disabled = true;
+            updateStatus('Connecting...');
+
+            // Pick device if not already selected
+            if (!selectedPort) {
+                const picked = await pickDevice();
+                if (!picked) {
+                    bootBtn.classList.remove('state-busy');
+                    bootBtn.classList.add('state-error');
+                    bootBtn.disabled = false;
+                    updateStatus('No device selected.');
+                    return;
+                }
+            }
+
+            updateStatus('Entering bootloader mode...');
+
+            try {
+                await selectedPort.open({ baudRate: 1200 });
+                await selectedPort.close();
+
+                // Clear port reference so user can select again
+                selectedPort = null;
+
+                updateStatus('Bootloader entry triggered successfully.');
+                toast('Device should enter bootloader mode.', 'success');
+                bootBtn.classList.remove('state-busy');
+                bootBtn.classList.add('state-success');
+            } catch (e) {
+                console.error(e);
+                updateStatus('Failed: ' + (e?.message || e));
+                toast('Failed to trigger bootloader entry.', 'error');
+                bootBtn.classList.remove('state-busy');
+                bootBtn.classList.add('state-error');
+            } finally {
+                bootBtn.disabled = false;
+            }
+        }
+
+        bootBtn.addEventListener('click', bootToBootloader);
+
+        // Initial capability check
+        if (!('serial' in navigator)) {
+            updateStatus('Web Serial not available. Use Chrome/Edge.');
+            bootBtn.disabled = true;
+        }
+    </script>
+</body>
+
+</html>
