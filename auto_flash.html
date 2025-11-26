@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auto Flash</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 2rem;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0 0 0.5rem;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .section {
+            background: #f5f5f5;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .section h2 {
+            font-size: 1rem;
+            margin: 0 0 1rem;
+            color: #333;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid #64b5f6;
+            background: #e3f2fd;
+            cursor: pointer;
+            transition: all 160ms ease;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+
+        button:hover:not(:disabled) {
+            background: #bbdefb;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.primary {
+            background: #4caf50;
+            border-color: #2e7d32;
+            color: white;
+        }
+
+        button.primary:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        #btn-pick-drive {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        button.stop {
+            background: #f44336;
+            border-color: #c62828;
+            color: white;
+        }
+
+        button.stop:hover:not(:disabled) {
+            background: #da190b;
+        }
+
+        .status {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            background: #fff;
+            border: 1px solid #ddd;
+            margin-top: 1rem;
+            min-height: 60px;
+        }
+
+        .status.monitoring {
+            background: #fff9c4;
+            border-color: #f9a825;
+        }
+
+        .status.flashing {
+            background: #bbdefb;
+            border-color: #1976d2;
+        }
+
+        .status.success {
+            background: #c8e6c9;
+            border-color: #2e7d32;
+        }
+
+        .counter {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-align: center;
+            color: #4caf50;
+            margin: 1rem 0;
+        }
+
+        .file-info {
+            padding: 0.75rem;
+            background: #e3f2fd;
+            border-radius: 0.5rem;
+            margin-top: 0.5rem;
+            word-break: break-all;
+        }
+
+        .muted {
+            opacity: 0.7;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .log {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            font-family: 'Courier New', monospace;
+            background: #263238;
+            color: #aed581;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .log-entry {
+            margin-bottom: 0.25rem;
+        }
+
+        .log-entry.error {
+            color: #ff5252;
+        }
+
+        .log-entry.success {
+            color: #69f0ae;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Auto Flash - Batch Production Mode</h1>
+        <p class="subtitle">Automatically flash firmware to RPI-RP2 drives as they appear</p>
+
+        <div class="section">
+            <h2>Step 1: Select Firmware</h2>
+            <button id="btn-select-file">Select UF2 File</button>
+            <div id="file-info" class="file-info" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>Step 2: Start Auto-Flashing</h2>
+            <button id="btn-start" class="primary" disabled>Start Monitoring</button>
+            <button id="btn-stop" class="stop" style="display: none;">Stop Monitoring</button>
+            <button id="btn-pick-drive" class="primary" style="display: none; font-size: 1.2rem; padding: 1rem 2rem;">📀 Pick RPI-RP2 Drive (Once)</button>
+            <div id="status" class="status">Select a UF2 file to begin.</div>
+        </div>
+
+        <div class="section">
+            <h2>Boards Flashed</h2>
+            <div class="counter" id="counter">0</div>
+        </div>
+
+        <div class="section">
+            <h2>Activity Log</h2>
+            <div class="log" id="log"></div>
+        </div>
+
+        <p class="muted">Use Chrome or Edge (Web Serial & File System Access required).</p>
+    </div>
+
+    <script>
+        const btnSelectFile = document.getElementById('btn-select-file');
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const btnPickDrive = document.getElementById('btn-pick-drive');
+        const fileInfoEl = document.getElementById('file-info');
+        const statusEl = document.getElementById('status');
+        const counterEl = document.getElementById('counter');
+        const logEl = document.getElementById('log');
+
+        let selectedFile = null;
+        let isMonitoring = false;
+        let flashCount = 0;
+        let monitorInterval = null;
+        let driveHandle = null;
+        let isFlashing = false;
+        let lastInfoContent = null;
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateStatus(text, className = '') {
+            statusEl.textContent = text;
+            statusEl.className = 'status ' + className;
+        }
+
+        async function selectFile() {
+            try {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'UF2 Firmware',
+                        accept: { 'application/octet-stream': ['.uf2'] }
+                    }],
+                    multiple: false
+                });
+
+                selectedFile = await fileHandle.getFile();
+                fileInfoEl.textContent = `Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`;
+                fileInfoEl.style.display = 'block';
+                btnStart.disabled = false;
+                updateStatus('Ready to start monitoring. Click "Start Monitoring" when ready.');
+                log(`File selected: ${selectedFile.name}`, 'success');
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    log('File selection failed: ' + e.message, 'error');
+                }
+            }
+        }
+
+        async function pickDriveOnce() {
+            try {
+                driveHandle = await window.showDirectoryPicker({
+                    id: 'rpi-rp2-drive',
+                    mode: 'readwrite'
+                });
+
+                log(`Drive selected: ${driveHandle.name}`, 'success');
+                btnPickDrive.style.display = 'none';
+                updateStatus('Drive locked! Monitoring for new boards...', 'monitoring');
+
+                // Start monitoring
+                monitorInterval = setInterval(checkAndFlash, 500);
+                
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    log('Drive selection cancelled.', 'error');
+                    stopMonitoring();
+                } else {
+                    log('Drive selection error: ' + e.message, 'error');
+                }
+            }
+        }
+
+        async function checkAndFlash() {
+            if (!driveHandle || !selectedFile || isFlashing) return;
+
+            try {
+                // Try to read INFO_UF2.TXT to detect new board
+                const infoHandle = await driveHandle.getFileHandle('INFO_UF2.TXT', { create: false });
+                const infoFile = await infoHandle.getFile();
+                const infoContent = await infoFile.text();
+
+                // Check if this is a new board (different INFO_UF2.TXT content)
+                if (lastInfoContent !== null && infoContent === lastInfoContent) {
+                    return; // Same board, already flashed
+                }
+
+                // New board detected!
+                isFlashing = true;
+                lastInfoContent = infoContent;
+                
+                updateStatus('New board detected! Flashing...', 'flashing');
+                log(`New board detected. Starting flash...`, 'info');
+
+                // Write the UF2 file
+                const fileHandle = await driveHandle.getFileHandle(selectedFile.name, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(selectedFile);
+                await writable.close();
+
+                flashCount++;
+                counterEl.textContent = flashCount;
+
+                updateStatus('Flash complete! Waiting for next board...', 'success');
+                log(`✓ Board ${flashCount} flashed successfully!`, 'success');
+
+                // Wait a bit before allowing next flash
+                setTimeout(() => {
+                    isFlashing = false;
+                    updateStatus('Ready for next board...', 'monitoring');
+                }, 2000);
+
+            } catch (e) {
+                // Drive not accessible (board rebooting or removed)
+                if (lastInfoContent !== null) {
+                    // We had a board before, now it's gone (rebooting)
+                    lastInfoContent = null;
+                    updateStatus('Waiting for next board...', 'monitoring');
+                }
+                isFlashing = false;
+            }
+        }
+
+        function startMonitoring() {
+            if (!selectedFile) return;
+
+            isMonitoring = true;
+            btnStart.style.display = 'none';
+            btnStop.style.display = 'inline-block';
+            btnPickDrive.style.display = 'inline-block';
+            btnSelectFile.disabled = true;
+            updateStatus('⚡ Click "Pick RPI-RP2 Drive" once to start...', 'monitoring');
+            log('Ready. Pick the RPI-RP2 drive to begin auto-flashing.', 'info');
+        }
+
+        function stopMonitoring() {
+            isMonitoring = false;
+            if (monitorInterval) {
+                clearInterval(monitorInterval);
+                monitorInterval = null;
+            }
+            btnStart.style.display = 'inline-block';
+            btnStop.style.display = 'none';
+            btnPickDrive.style.display = 'none';
+            btnSelectFile.disabled = false;
+            driveHandle = null;
+            lastInfoContent = null;
+            updateStatus('Monitoring stopped.', '');
+            log('Monitoring stopped by user.', 'info');
+        }
+
+        btnSelectFile.addEventListener('click', selectFile);
+        btnStart.addEventListener('click', startMonitoring);
+        btnStop.addEventListener('click', stopMonitoring);
+        btnPickDrive.addEventListener('click', pickDriveOnce);
+
+        // Initial check
+        if (!('showOpenFilePicker' in window) || !('showDirectoryPicker' in window)) {
+            updateStatus('File System Access API not available. Use Chrome/Edge.');
+            btnSelectFile.disabled = true;
+            log('Browser not supported. Use Chrome or Edge.', 'error');
+        }
+
+        log('Auto Flash ready. Select a UF2 file to begin.', 'info');
+    </script>
+</body>
+
+</html>
+

@@ -1,5 +1,7 @@
 ## RP2040 Web Uploader v1.2 (no BOOT/SEL access)
 
+<a href="https://www.buymeacoffee.com/polaxis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+
 ![Interface](Interface.png)
 
 This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` file directly from your browser. It is useful after assembly when the hardware BOOT/SEL buttons are not accessible.
@@ -7,7 +9,7 @@ This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` f
 ### Requirements
 - **Browser**: Chrome or Edge (desktop). Safari is not supported.
 - **APIs**: Web Serial and File System Access (automatically available in Chrome/Edge).
-- **Context**: Prefer `https://` or `http://localhost/` so the File System Access API works fully.
+- **Usage**: Simply open the HTML file directly in your browser (double-click or drag to browser tab).
 
 ### Quick Start
 1. Open `rp2040-uploader.html` in Chrome/Edge (double-click, or drag it into a new tab).
@@ -32,8 +34,35 @@ For a minimal approach, use `just_boot.html`. This tool only triggers bootloader
 3. Wait for the bootloader drive to appear (RPI-RP2 for RP2040, or your SAMD21 bootloader drive).
 4. Manually drag your `.uf2` file to the drive.
 
+---
+
+### Production: Auto Flash (Batch Flashing)
+
+![Auto Flash Interface](auto_flash.png)
+
+For batch production or flashing multiple **new/blank boards** with the same firmware, use `auto_flash.html`. This tool automatically flashes firmware as soon as a bootloader drive appears - perfect for production runs.
+
+**Requires**: Hardware BOOTSEL button access (for new boards without firmware or firmware lacking 1200 bps touch support).
+
+**Features**:
+- Select firmware once, flash unlimited boards
+- Pick the bootloader drive once (no repeated Finder navigation)
+- Automatically detects new boards and flashes them
+- Tracks count of boards flashed
+- Activity log for monitoring
+
+**Usage**:
+1. Open `auto_flash.html` in Chrome/Edge.
+2. Click **Select UF2 File** and choose your firmware.
+3. Click **Start Monitoring**.
+4. Click **Pick RPI-RP2 Drive (Once)** and select the bootloader drive (only needed once).
+5. For each board: Hold BOOTSEL button, plug in USB (or press RESET while holding BOOTSEL) - firmware flashes automatically!
+6. Board reboots automatically after flashing. Repeat for next board.
+
+**Ideal for**: Production environments where you need to flash 10, 20, 50+ brand new boards with the same firmware quickly.
+
 ### Notes
-- This tool does not require hardware BOOT/SEL access, but your current firmware must support the **1200‑bps touch** reset convention.
+
 - Works entirely in the browser; no drivers or installs are required on supported OSes.
 - The interface uses color coding: **Green** = active/completed step, **Blue** = available step, **Grey** = disabled step.
 
