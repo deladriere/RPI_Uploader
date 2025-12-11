@@ -6,6 +6,8 @@
 
 This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` file directly from your browser. It is useful after assembly when the hardware BOOT/SEL buttons are not accessible.
 
+**Important**: The board must already run firmware that supports the 1200 bps "touch" method (e.g., CircuitPython, Arduino with native USB). Blank boards or boards without this support require hardware BOOTSEL button access.
+
 ### Requirements
 - **Browser**: Chrome or Edge (desktop). Safari is not supported.
 - **APIs**: Web Serial and File System Access (automatically available in Chrome/Edge).
