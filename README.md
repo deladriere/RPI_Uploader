@@ -1,6 +1,6 @@
 ## RP2040 Web Uploader v1.2 (no BOOT/SEL access)
 
-<a href="https://www.buymeacoffee.com/polaxis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+
 
 ![Interface](Interface.png)
 
@@ -35,31 +35,6 @@ For a minimal approach, use `just_boot.html`. This tool only triggers bootloader
 4. Manually drag your `.uf2` file to the drive.
 
 ---
-
-### Production: Auto Flash (Batch Flashing)
-
-![Auto Flash Interface](auto_flash.png)
-
-For batch production or flashing multiple **new/blank boards** with the same firmware, use `auto_flash.html`. This tool automatically flashes firmware as soon as a bootloader drive appears - perfect for production runs.
-
-**Requires**: Hardware BOOTSEL button access (for new boards without firmware or firmware lacking 1200 bps touch support).
-
-**Features**:
-- Select firmware once, flash unlimited boards
-- Pick the bootloader drive once (no repeated Finder navigation)
-- Automatically detects new boards and flashes them
-- Tracks count of boards flashed
-- Activity log for monitoring
-
-**Usage**:
-1. Open `auto_flash.html` in Chrome/Edge.
-2. Click **Select UF2 File** and choose your firmware.
-3. Click **Start Monitoring**.
-4. Click **Pick RPI-RP2 Drive (Once)** and select the bootloader drive (only needed once).
-5. For each board: Hold BOOTSEL button, plug in USB (or press RESET while holding BOOTSEL) - firmware flashes automatically!
-6. Board reboots automatically after flashing. Repeat for next board.
-
-**Ideal for**: Production environments where you need to flash 10, 20, 50+ brand new boards with the same firmware quickly.
 
 ### Notes
 
