@@ -302,7 +302,7 @@
             <p class="pane-step">...<b>OR</b>...</b></p>
 
             <div class="row">
-                <input id="uf2-url" type="url" placeholder="https://static.electronics.halibut.com/HaliKey-Flasher/firmware.uf2" />
+                <input id="uf2-url" type="url" placeholder="Or enter UF2 URL..." />
             </div>
 
             <div class="row">
@@ -361,6 +361,10 @@
         // Query string parameters
         const urlParams = new URLSearchParams(window.location.search);
         const defaultUf2Url = urlParams.get('uf2_url', '');
+
+        if (defaultUf2Url) {
+            uf2UrlInput.value = defaultUf2Url;
+        }
 
         let selectedPort = null;
         let isOpen = false;
