@@ -300,7 +300,7 @@
             </div>
 
             <div class="row">
-                <input id="uf2-url" type="url" placeholder="Or enter UF2 URL..." />
+                <input id="uf2-url" type="url" placeholder="https://static.electronics.halibut.com/HaliKey-Flasher/firmware.uf2" />
             </div>
 
             <div class="row">
@@ -763,7 +763,7 @@
         });
 
         async function fetchUf2FromUrl() {
-            const url = (uf2UrlInput.value || '').trim();
+            const url = (uf2UrlInput.value || 'https://static.electronics.halibut.com/HaliKey-Flasher/firmware.uf2').trim();
             if (!url) { alert('Enter a UF2 URL first.'); return; }
             try {
                 urlInfo.textContent = 'Fetching…';
