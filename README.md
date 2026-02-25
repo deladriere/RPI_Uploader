@@ -9,7 +9,7 @@ This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` f
 **Important**: The board must already run firmware that supports the 1200 bps "touch" method (e.g., CircuitPython, Arduino with native USB). Blank boards or boards without this support require hardware BOOTSEL button access.
 
 ### Requirements
-- **Browser**: Chrome or Edge (desktop). Safari is not supported.
+- **Browser**: Chrome or Edge (desktop). Safari and Firefox are not supported.
 - **APIs**: Web Serial and File System Access (automatically available in Chrome/Edge).
 - **Usage**: Simply open the HTML file directly in your browser (double-click or drag to browser tab).
 
@@ -21,6 +21,11 @@ This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` f
 5. **Step 4 - Upload Firmware**: 
    - Click **Select UF2 File** (or enter a **URL** and click **Fetch from URL**).
    - Click **Write UF2 to Drive**. The board will reboot when the copy completes.
+
+Optional Query String Parameters:
+- `uf2_url`: Fills in the URL in the Upload Firmware step, so the user only needs to click "Fetch from URL" without pasting a link.
+  - For example: `https://domain.com/rp2040-uploader.html?uf2_url=https://domain.com/firmware.uf2`
+  - URL can also be relative.  For example: `https://domain.com/rp2040-uploader.html?uf2_url=firmware.uf2` will load `https://domain.com/firmware.uf2`
 
 ### Alternative: Just Boot (Simpler)
 

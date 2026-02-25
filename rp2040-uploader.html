@@ -291,13 +291,15 @@
         <!-- Pane 4: Upload Firmware -->
         <div class="pane pane-disabled" id="pane-upload">
             <h2>4. Upload Firmware</h2>
-            <p class="pane-step">Select and upload UF2 firmware file</p>
+            <p class="pane-step">Select and upload UF2 firmware file, either local or from a URL</p>
 
             <div class="row">
                 <button id="btn-uf2">Select UF2 File</button>
                 <input id="file-uf2" type="file" accept=".uf2" style="display:none" />
                 <span id="uf2-info" class="badge">No file selected</span>
             </div>
+
+            <p class="pane-step">...<b>OR</b>...</b></p>
 
             <div class="row">
                 <input id="uf2-url" type="url" placeholder="Or enter UF2 URL..." />
@@ -355,6 +357,14 @@
         const bootloaderStatus = document.getElementById('bootloader-status');
         const driveStatus = document.getElementById('drive-status');
         const uploadStatus = document.getElementById('upload-status');
+
+        // Query string parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const defaultUf2Url = urlParams.get('uf2_url', '');
+
+        if (defaultUf2Url) {
+            uf2UrlInput.value = defaultUf2Url;
+        }
 
         let selectedPort = null;
         let isOpen = false;
@@ -763,7 +773,7 @@
         });
 
         async function fetchUf2FromUrl() {
-            const url = (uf2UrlInput.value || '').trim();
+            const url = (uf2UrlInput.value || defaultUf2Url).trim();
             if (!url) { alert('Enter a UF2 URL first.'); return; }
             try {
                 urlInfo.textContent = 'Fetching…';
