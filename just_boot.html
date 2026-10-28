@@ -8,6 +8,39 @@
     <style>
         :root {
             color-scheme: light dark;
+
+            /* Light (the original colours) */
+            --accent: #64b5f6;
+            --btn-bg: #e3f2fd;
+            --btn-fg: ButtonText;
+            --status-bg: #f5f5f5;
+            --busy-bg: #ffe49c;
+            --busy-border: #cfaa2a;
+            --busy-fg: CanvasText;
+            --ok-bg: #b7efc5;
+            --ok-border: #2e7d32;
+            --ok-fg: CanvasText;
+            --err-bg: #ffb3b3;
+            --err-border: #c62828;
+            --err-fg: CanvasText;
+        }
+
+        /* Dark: the same hues, as deep backgrounds with light text (as in rp2040-uploader.html) */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --btn-bg: #183552;
+                --btn-fg: #e3f2fd;
+                --status-bg: #1b2128;
+                --busy-bg: #4d3d0c;
+                --busy-border: #e0b84a;
+                --busy-fg: #fff1c7;
+                --ok-bg: #173f24;
+                --ok-border: #66bb6a;
+                --ok-fg: #d4f5dc;
+                --err-bg: #4c1818;
+                --err-border: #ef5350;
+                --err-fg: #ffd9d9;
+            }
         }
 
         body {
@@ -29,8 +62,9 @@
         button {
             padding: 1rem 2rem;
             border-radius: 0.5rem;
-            border: 1px solid #64b5f6;
-            background: #e3f2fd;
+            border: 1px solid var(--accent);
+            background: var(--btn-bg);
+            color: var(--btn-fg);
             cursor: pointer;
             transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
             font-size: 1.1rem;
@@ -52,25 +86,28 @@
         }
 
         .state-busy {
-            background: #ffe49c;
-            border-color: #cfaa2a;
+            background: var(--busy-bg);
+            border-color: var(--busy-border);
+            color: var(--busy-fg);
         }
 
         .state-success {
-            background: #b7efc5;
-            border-color: #2e7d32;
+            background: var(--ok-bg);
+            border-color: var(--ok-border);
+            color: var(--ok-fg);
         }
 
         .state-error {
-            background: #ffb3b3;
-            border-color: #c62828;
+            background: var(--err-bg);
+            border-color: var(--err-border);
+            color: var(--err-fg);
         }
 
         .status {
             margin-top: 1.5rem;
             padding: 0.75rem;
             border-radius: 0.5rem;
-            background: #f5f5f5;
+            background: var(--status-bg);
             min-width: 300px;
             text-align: center;
             font-size: 0.9rem;

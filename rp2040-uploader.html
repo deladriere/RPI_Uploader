@@ -4,10 +4,60 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RP2040 Boot Mode Test (Web Serial) v1.2</title>
+    <title>RP2040/RP2350 Firmware Uploader v1.2</title>
     <style>
         :root {
             color-scheme: light dark;
+
+            /* Light (the original colours) */
+            --accent: #64b5f6;          /* blue: borders */
+            --pane-bg: #fafafa;
+            --pane-off: #8882;
+            --active-border: #2e7d32;
+            --active-bg: #f1f8f4;
+            --step-fg: #666;
+            --btn-bg: #e3f2fd;
+            --btn-fg: ButtonText;
+            --badge-bg: #bbdefb;
+            --badge-fg: CanvasText;
+            --pre-bg: #00000010;
+            --rule: #ccc;
+            --busy-bg: #ffe49c;
+            --busy-border: #cfaa2a;
+            --busy-fg: CanvasText;
+            --ok-bg: #b7efc5;
+            --ok-border: #2e7d32;
+            --ok-fg: CanvasText;
+            --err-bg: #ffb3b3;
+            --err-border: #c62828;
+            --err-fg: CanvasText;
+        }
+
+        /* Dark: the same hues, as deep backgrounds with light text */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --accent: #64b5f6;
+                --pane-bg: #1b2128;
+                --pane-off: #8884;
+                --active-border: #66bb6a;
+                --active-bg: #15271b;
+                --step-fg: #a9b3bd;
+                --btn-bg: #183552;
+                --btn-fg: #e3f2fd;
+                --badge-bg: #1f3d5f;
+                --badge-fg: #e3f2fd;
+                --pre-bg: #ffffff0d;
+                --rule: #3a434c;
+                --busy-bg: #4d3d0c;
+                --busy-border: #e0b84a;
+                --busy-fg: #fff1c7;
+                --ok-bg: #173f24;
+                --ok-border: #66bb6a;
+                --ok-fg: #d4f5dc;
+                --err-bg: #4c1818;
+                --err-border: #ef5350;
+                --err-fg: #ffd9d9;
+            }
         }
 
         body {
@@ -41,23 +91,23 @@
         }
 
         .pane {
-            border: 2px solid #64b5f6;
+            border: 2px solid var(--accent);
             border-radius: 0.75rem;
             padding: 1.25rem;
-            background: #fafafa;
+            background: var(--pane-bg);
             transition: opacity 0.3s ease, border-color 0.3s ease;
         }
 
         .pane:disabled,
         .pane.pane-disabled {
             opacity: 0.5;
-            border-color: #8882;
+            border-color: var(--pane-off);
             pointer-events: none;
         }
 
         .pane.active {
-            border-color: #2e7d32;
-            background: #f1f8f4;
+            border-color: var(--active-border);
+            background: var(--active-bg);
         }
 
         .pane h2 {
@@ -68,7 +118,7 @@
 
         .pane-step {
             font-size: 0.85rem;
-            color: #666;
+            color: var(--step-fg);
             margin-bottom: 0.5rem;
         }
 
@@ -91,8 +141,9 @@
         button {
             padding: 0.6rem 1rem;
             border-radius: 0.5rem;
-            border: 1px solid #64b5f6;
-            background: #e3f2fd;
+            border: 1px solid var(--accent);
+            background: var(--btn-bg);
+            color: var(--btn-fg);
             cursor: pointer;
             transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
             font-size: 0.95rem;
@@ -117,7 +168,7 @@
         select {
             padding: 0.5rem;
             border-radius: 0.4rem;
-            border: 1px solid #64b5f6;
+            border: 1px solid var(--accent);
             width: 100%;
             box-sizing: border-box;
         }
@@ -129,7 +180,7 @@
         }
 
         pre {
-            background: #00000010;
+            background: var(--pre-bg);
             padding: 0.75rem;
             border-radius: 0.5rem;
             max-height: 40vh;
@@ -140,42 +191,49 @@
         .badge {
             padding: 0.25rem 0.6rem;
             border-radius: 999px;
-            background: #bbdefb;
+            background: var(--badge-bg);
+            color: var(--badge-fg);
             font-size: 0.85rem;
-            border: 1px solid #64b5f6;
+            border: 1px solid var(--accent);
             display: inline-block;
         }
 
         /* Button feedback states */
         .state-busy {
-            background: #ffe49c;
-            border-color: #cfaa2a;
+            background: var(--busy-bg);
+            border-color: var(--busy-border);
+            color: var(--busy-fg);
         }
 
         .state-success {
-            background: #b7efc5;
-            border-color: #2e7d32;
+            background: var(--ok-bg);
+            border-color: var(--ok-border);
+            color: var(--ok-fg);
         }
 
         .state-error {
-            background: #ffb3b3;
-            border-color: #c62828;
+            background: var(--err-bg);
+            border-color: var(--err-border);
+            color: var(--err-fg);
         }
 
         /* Badge state variants */
         .badge.state-success {
-            background: #b7efc5;
-            border-color: #2e7d32;
+            background: var(--ok-bg);
+            border-color: var(--ok-border);
+            color: var(--ok-fg);
         }
 
         .badge.state-error {
-            background: #ffb3b3;
-            border-color: #c62828;
+            background: var(--err-bg);
+            border-color: var(--err-border);
+            color: var(--err-fg);
         }
 
         .badge.state-busy {
-            background: #ffe49c;
-            border-color: #cfaa2a;
+            background: var(--busy-bg);
+            border-color: var(--busy-border);
+            color: var(--busy-fg);
         }
 
         /* Toast notifications */
@@ -197,6 +255,11 @@
             color: #fff;
             box-shadow: 0 2px 10px #0004;
             max-width: 60ch;
+            white-space: pre-line;
+        }
+
+        .toast.sticky {
+            cursor: pointer;
         }
 
         .toast.success {
@@ -217,7 +280,7 @@
         .status-section {
             margin-top: 1rem;
             padding-top: 1rem;
-            border-top: 1px solid #ccc;
+            border-top: 1px solid var(--rule);
         }
 
         .file-input-wrapper {
@@ -235,7 +298,7 @@
 </head>
 
 <body>
-    <h1>RP2040 Firmware Uploader <span class="badge">v1.2</span></h1>
+    <h1><span id="brand-title">RP2040/RP2350 Firmware Uploader</span> <span class="badge" id="brand-badge">v1.2</span></h1>
 
     <p class="muted" style="margin-bottom: 1.5rem;">
         Use Chrome or Edge (Web Serial required). Safari currently does not support Web Serial.
@@ -245,7 +308,7 @@
         <!-- Pane 1: Connect Device -->
         <div class="pane active" id="pane-connect">
             <h2>1. Connect Device</h2>
-            <p class="pane-step">Select your RP2040 device via serial port</p>
+            <p class="pane-step">Select your <span id="brand-device">RP2040/RP2350 device</span> via serial port</p>
 
             <div class="row">
                 <button id="btn-pick">Pick Device</button>
@@ -276,10 +339,10 @@
         <!-- Pane 3: Pick Drive -->
         <div class="pane pane-disabled" id="pane-drive">
             <h2>3. Confirm/Pick Drive</h2>
-            <p class="pane-step">After reboot, device appears as RPI-RP2 drive</p>
+            <p class="pane-step">After reboot, device appears as a drive: RPI-RP2 or RP2350</p>
 
             <div class="row">
-                <button id="btn-pick-drive" disabled>Pick RPI-RP2 Drive</button>
+                <button id="btn-pick-drive" disabled>Pick Bootloader Drive</button>
                 <span id="drive-info" class="badge">No drive selected</span>
             </div>
 
@@ -330,7 +393,30 @@
 
     <div id="toasts" aria-live="polite" aria-atomic="true"></div>
 
+    <!-- Optional: your own names for the page (see branding.example.js).  Without it, the defaults below. -->
+    <script src="branding.js"></script>
+
     <script>
+        // ---- Branding: the defaults, and anything branding.js (window.UPLOADER_BRANDING) sets instead.
+        const BRAND_DEFAULTS = {
+            title: 'RP2040/RP2350 Firmware Uploader',  // heading
+            tab: 'RP2040/RP2350 Firmware Uploader v1.2', // browser tab
+            badge: 'v1.2',                      // next to the heading
+            device: 'RP2040/RP2350 device',     // "Select your ... via serial port"
+            // What each chip's bootloader drive is called on the page.
+            chips: { rp2040: 'RPI-RP2', rp2350: 'RP2350' },
+        };
+        const userBrand = (typeof window.UPLOADER_BRANDING === 'object' && window.UPLOADER_BRANDING) || {};
+        const BRAND = Object.assign({}, BRAND_DEFAULTS, userBrand);
+        BRAND.chips = Object.assign({}, BRAND_DEFAULTS.chips, userBrand.chips || {});
+        document.title = BRAND.tab;
+        document.getElementById('brand-title').textContent = BRAND.title;
+        document.getElementById('brand-badge').textContent = BRAND.badge;
+        document.getElementById('brand-device').textContent = BRAND.device;
+        document.querySelector('#pane-drive .pane-step').textContent =
+            'After reboot, device appears as a drive: ' + BRAND.chips.rp2040 + ' or ' + BRAND.chips.rp2350;
+        const DRIVES = 'bootloader drive (RPI-RP2 or RP2350)';
+
         const logEl = document.getElementById('log');
         const pickBtn = document.getElementById('btn-pick');
         const infoEl = document.getElementById('port-info');
@@ -368,12 +454,14 @@
 
         let selectedPort = null;
         let isOpen = false;
-        let selectedDirectory = null; // RPI-RP2 directory handle
+        let selectedDirectory = null; // Bootloader drive (RPI-RP2 or RP2350) directory handle
+        let driveChip = null;         // 'rp2040' or 'rp2350', from the drive's INFO_UF2.TXT
         let uf2Blob = null;           // Chosen UF2 content
         let uf2Name = '';             // Name to write on the drive
         let expectingReboot = false;  // True during/after 1200-bps touch
         let portDisconnected = false; // True when port disappeared (but not confirmed in bootloader)
-        let rebootSuccessful = false;  // True when RPI-RP2 drive is verified
+        let rebootSuccessful = false;  // True when the bootloader drive is verified
+        let touchTried = false;       // A 1200-bps touch was sent: the drive can be picked even if the port seemed to stay
         let selectedPortInfo = null;  // Store port info for comparison with disconnect events
 
         function log(message) {
@@ -454,14 +542,17 @@
                 touchBtn.disabled = true;
             }
 
-            // Pane 3 (Drive) becomes active when port disconnects (allows picking drive)
-            // Success is only confirmed when RPI-RP2 drive is verified
-            if (portDisconnected || rebootSuccessful) {
+            // Pane 3 (Drive) becomes active when port disconnects (allows picking drive),
+            // or after any reboot attempt (the drive may have appeared anyway: picking it verifies it)
+            // Success is only confirmed when the bootloader drive is verified
+            if (portDisconnected || rebootSuccessful || touchTried) {
                 paneDrive.classList.remove('pane-disabled');
                 paneDrive.classList.add('active');
                 pickDriveBtn.disabled = false;
                 if (!rebootSuccessful) {
-                    driveStatus.textContent = 'Port disconnected - verify RPI-RP2 drive appears';
+                    driveStatus.textContent = portDisconnected
+                        ? 'Port disconnected - verify the bootloader drive appears'
+                        : 'If the bootloader drive appeared anyway, pick it';
                 }
             } else {
                 paneDrive.classList.add('pane-disabled');
@@ -480,14 +571,40 @@
             }
         }
 
+        // Errors stay until clicked (and go in the log too), so they can be read.
         function toast(message, type = 'info', timeoutMs = 3000) {
             try {
                 const el = document.createElement('div');
                 el.className = `toast ${type}`;
                 el.textContent = message;
+                if (type === 'error') {
+                    el.classList.add('sticky');
+                    el.title = 'Click to close';
+                    el.textContent += '\n(click to close)';
+                    el.addEventListener('click', () => el.remove());
+                    log('Error: ' + message);
+                } else {
+                    setTimeout(() => { el.remove(); }, timeoutMs);
+                }
                 toasts.appendChild(el);
-                setTimeout(() => { el.remove(); }, timeoutMs);
             } catch { }
+        }
+
+        // Resolves true when a serial device connects (eg: the board, back after flashing), false after timeoutMs.
+        // sinceMs: a connect at or after this time (Date.now()) also counts, in case it came first.
+        const connectWaiters = [];
+        let lastSerialConnect = 0;
+        function waitForSerialConnect(timeoutMs, sinceMs = Infinity) {
+            return new Promise((resolve) => {
+                if (lastSerialConnect >= sinceMs) { resolve(true); return; }
+                const done = (ok) => {
+                    const i = connectWaiters.indexOf(done);
+                    if (i >= 0) connectWaiters.splice(i, 1);
+                    resolve(ok);
+                };
+                connectWaiters.push(done);
+                setTimeout(() => done(false), timeoutMs);
+            });
         }
 
         function explainFsWriteError(e) {
@@ -514,6 +631,7 @@
                 portDisconnected = false;
                 rebootSuccessful = false;
                 expectingReboot = false;
+                touchTried = false;
                 selectedDirectory = null;
                 uf2Blob = null;
                 uf2Name = '';
@@ -654,59 +772,37 @@
                 await selectedPort.close();
                 isOpen = false;
 
-                // Give the device a moment to reboot and disappear (increased wait for disconnect event)
-                await sleep(500);
+                // Wait for the port to disappear (the disconnect handler sets portDisconnected):
+                // some boards take a second or more to reboot, so wait up to 10 s.
+                // (getInfo() can't tell: it still works on a port that has gone.)
+                for (let waited = 0; waited < 10000 && !portDisconnected; waited += 100) {
+                    await sleep(100);
+                }
+                touchTried = true;
 
-                // Check if port was already marked as disconnected by the event handler
                 if (portDisconnected) {
                     // Disconnect event already handled it - nothing to do here
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-success');
-                    log('Port disconnect confirmed by event handler. Please verify RPI-RP2 drive appears.');
+                    log('Port disconnect confirmed by event handler. Please verify the ' + DRIVES + ' appears.');
                 } else {
-                    // Check if the port is still available - if it disappeared, reboot was successful
-                    let portStillExists = false;
-                    try {
-                        // Try to access port info - if port disappeared, this might fail or the port object becomes invalid
-                        if (selectedPort) {
-                            selectedPort.getInfo();
-                            portStillExists = true;
-                        }
-                    } catch {
-                        portStillExists = false;
-                    }
-
-                    if (!portStillExists || !selectedPort) {
-                        // Port disappeared - this is a good sign, but not confirmation
-                        log('Serial port disappeared. Please verify RPI-RP2 drive appears before confirming reboot success.');
-                        toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
-                        selectedPort = null;
-                        selectedPortInfo = null;
-                        setInfo('Port disconnected - verify drive');
-                        touchBtn.classList.remove('state-busy');
-                        touchBtn.classList.add('state-success');
-                        bootloaderStatus.textContent = 'Reboot successful - port disconnected';
-                        portDisconnected = true;
-                        rebootSuccessful = false; // Not confirmed until drive is picked
-                        updatePaneStates();
-                    } else {
-                        log('Closed after 1200-bps touch. Serial port still present - device may not have rebooted to bootloader.');
-                        toast('Port still present. Device may not be in bootloader mode.', 'error');
-                        touchBtn.classList.remove('state-busy');
-                        touchBtn.classList.add('state-error');
-                        bootloaderStatus.textContent = 'Port still present - reboot may have failed';
-                        portDisconnected = false;
-                        rebootSuccessful = false;
-                        updatePaneStates();
-                    }
+                    log('Closed after 1200-bps touch. Serial port still present after 10 s - device may not have rebooted to bootloader. If the drive appeared anyway, pick it in step 3.');
+                    toast('Port still present. Device may not be in bootloader mode.', 'error');
+                    touchBtn.classList.remove('state-busy');
+                    touchBtn.classList.add('state-error');
+                    bootloaderStatus.textContent = 'Port still present - reboot may have failed';
+                    portDisconnected = false;
+                    rebootSuccessful = false;
+                    updatePaneStates();
                 }
             } catch (e) {
                 console.error(e);
+                touchTried = true;
                 if (isLikelyRebootError(e)) {
                     // Port disconnected during operation - good sign, but verify drive
                     isOpen = false;
-                    log('Serial port disappeared during 1200-bps touch. Please verify RPI-RP2 drive appears to confirm bootloader mode.');
-                    toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
+                    log('Serial port disappeared during 1200-bps touch. Please verify the ' + DRIVES + ' appears to confirm bootloader mode.');
+                    toast('Port disconnected. Please pick the ' + DRIVES + ' to verify bootloader mode.', 'info');
                     selectedPort = null;
                     selectedPortInfo = null;
                     setInfo('Port disconnected - verify drive');
@@ -724,6 +820,7 @@
                     bootloaderStatus.textContent = 'Reboot failed';
                     portDisconnected = false;
                     rebootSuccessful = false;
+                    updatePaneStates();
                 }
             } finally {
                 expectingReboot = false;
@@ -814,26 +911,34 @@
                 setDrive('Picked');
                 log('Drive picked. Checking for UF2 markers');
                 let likely = false;
-                try { await dir.getFileHandle('INFO_UF2.TXT'); likely = true; } catch { }
+                driveChip = null;
+                try {
+                    const info = await (await (await dir.getFileHandle('INFO_UF2.TXT')).getFile()).text();
+                    likely = true;
+                    const board = (info.match(/Board-ID:\s*(\S+)/) || [])[1] || '';
+                    driveChip = board.includes('RP2350') ? 'rp2350' : board.includes('RPI-RP2') ? 'rp2040' : null;
+                    log('INFO_UF2.TXT: Board-ID ' + (board || '?'));
+                } catch { }
                 try { await dir.getFileHandle('INDEX.HTM'); likely = true; } catch { }
                 if (likely) {
-                    setDrive('RPI-RP2 (verified)');
+                    const what = BRAND.chips[driveChip] || 'bootloader';
+                    setDrive(what + ' (verified)');
                     driveInfo.classList.add('state-success');
                     driveInfo.classList.remove('state-error');
-                    log('UF2 markers found: this looks like the RPI-RP2 drive.');
-                    driveStatus.textContent = 'Drive verified - RPI-RP2 detected';
-                    toast('RPI-RP2 drive selected and verified. Reboot to bootloader confirmed!', 'success');
+                    log('UF2 markers found: this looks like the ' + what + ' drive.');
+                    driveStatus.textContent = 'Drive verified - ' + what + ' detected';
+                    toast(what + ' drive selected and verified. Reboot to bootloader confirmed!', 'success');
                     // NOW we can confirm reboot was successful
                     rebootSuccessful = true;
-                    bootloaderStatus.textContent = 'Reboot confirmed - RPI-RP2 verified';
+                    bootloaderStatus.textContent = 'Reboot confirmed - ' + what + ' verified';
                     touchBtn.classList.add('state-success');
                 } else {
                     setDrive('Picked (unverified)');
                     driveInfo.classList.remove('state-success');
                     driveInfo.classList.add('state-error');
-                    log('UF2 markers not found. Ensure you selected the root of the RPI-RP2 drive.');
+                    log('UF2 markers not found. Ensure you selected the root of the ' + DRIVES + '.');
                     driveStatus.textContent = 'Drive picked but not verified';
-                    toast('Warning: Selected drive does not appear to be RPI-RP2. Reboot may not have succeeded.', 'error');
+                    toast('Warning: Selected drive does not appear to be the ' + DRIVES + '. Reboot may not have succeeded.', 'error');
                     rebootSuccessful = false;
                     bootloaderStatus.textContent = 'Drive not verified - reboot may have failed';
                 }
@@ -849,8 +954,34 @@
         }
         pickDriveBtn.addEventListener('click', pickDrive);
 
+        // The UF2 family IDs each chip's bootrom takes (it ignores blocks of other families).
+        const UF2_FAMILIES = {
+            rp2040: [0xe48bff56],
+            rp2350: [0xe48bff59, 0xe48bff5a, 0xe48bff5b],  // ARM-S, RISC-V, ARM-NS
+        };
+        // The family IDs in a UF2 file, or null if it isn't one.
+        function uf2Families(buf) {
+            const v = new DataView(buf), out = new Set();
+            if (buf.byteLength < 512 || buf.byteLength % 512) return null;
+            for (let i = 0; i < buf.byteLength; i += 512) {
+                if (v.getUint32(i, true) !== 0x0A324655 || v.getUint32(i + 4, true) !== 0x9E5D5157) return null;
+                if (v.getUint32(i + 8, true) & 0x2000) out.add(v.getUint32(i + 28, true));
+            }
+            return out;
+        }
+
         async function writeUf2ToDrive() {
             if (!selectedDirectory || !uf2Blob) { alert('Pick a UF2 and the drive first.'); return; }
+            const fams = uf2Families(await uf2Blob.arrayBuffer());
+            if (!fams) { toast('That file is not a UF2 file. Not writing it.', 'error'); return; }
+            // A UF2 with family IDs, but none for this chip, would be ignored by its bootrom.
+            if (driveChip && fams.size && !UF2_FAMILIES[driveChip].some(f => fams.has(f))) {
+                toast('This UF2 has nothing for this board (' + BRAND.chips[driveChip] + '). Not writing it.', 'error');
+                log('UF2 has no ' + driveChip + ' family blocks: not written.');
+                return;
+            }
+            let startedWriting = false;
+            const writeStart = Date.now();
             try {
                 writeUf2Btn.disabled = true;
                 writeUf2Btn.classList.remove('state-success', 'state-error');
@@ -860,6 +991,7 @@
                 const writable = await fileHandle.createWritable();
                 const buf = await uf2Blob.arrayBuffer();
                 log('Writing ' + (buf.byteLength || 0) + ' bytes to ' + (uf2Name || 'firmware.uf2') + '...');
+                startedWriting = true;
                 await writable.write(buf);
                 await writable.close();
                 log('Write complete. Device should reboot and the drive may disappear.');
@@ -869,10 +1001,31 @@
                 writeUf2Btn.classList.add('state-success');
             } catch (e) {
                 console.error(e);
-                toast('Failed to write UF2: ' + explainFsWriteError(e), 'error');
-                uploadStatus.textContent = 'Upload failed';
-                writeUf2Btn.classList.remove('state-busy');
-                writeUf2Btn.classList.add('state-error');
+                if (startedWriting) {
+                    // The bootloader reboots as soon as it has every block of the UF2, often before the
+                    // browser has finished with the file (Chrome writes a .crswap file, then renames it):
+                    // so an error here usually means it worked.  The board coming back says so.
+                    log('The browser reported: ' + (e?.name || '') + ' ' + (e?.message || e) +
+                        '.  Usually that is the board rebooting as soon as it had the whole file: checking whether it comes back...');
+                    uploadStatus.textContent = 'Checking whether the board restarted...';
+                    if (await waitForSerialConnect(20000, writeStart)) {
+                        log('The board is back: the firmware was written.  (The browser\'s error was just the board rebooting before the browser finished.)');
+                        toast('UF2 written: the board restarted.', 'success');
+                        uploadStatus.textContent = 'Firmware uploaded successfully!';
+                        writeUf2Btn.classList.remove('state-busy');
+                        writeUf2Btn.classList.add('state-success');
+                    } else {
+                        log('No serial device came back within 20 s.  If the board restarted with its new firmware, the write worked; if the drive is still there, try again.');
+                        toast('UF2 sent, but not confirmed: the board did not show up again within 20 s. If it restarted, it worked.', 'info', 10000);
+                        uploadStatus.textContent = 'Written, not confirmed: check the board';
+                        writeUf2Btn.classList.remove('state-busy');
+                    }
+                } else {
+                    toast('Failed to write UF2: ' + explainFsWriteError(e), 'error');
+                    uploadStatus.textContent = 'Upload failed';
+                    writeUf2Btn.classList.remove('state-busy');
+                    writeUf2Btn.classList.add('state-error');
+                }
             } finally {
                 updateWriteReadyBadge();
             }
@@ -890,12 +1043,15 @@
         if ('serial' in navigator) {
             navigator.serial.addEventListener('connect', (e) => {
                 try { log('Serial device connected: ' + describePort(e.port)); } catch { log('Serial device connected.'); }
+                lastSerialConnect = Date.now();
+                connectWaiters.slice().forEach((done) => done(true));
             });
             navigator.serial.addEventListener('disconnect', (e) => {
                 // If we're expecting a reboot, ANY disconnect is likely our device rebooting
-                if (expectingReboot) {
-                    log('Serial port disappeared during reboot. Please pick RPI-RP2 drive to verify bootloader mode.');
-                    toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
+                // (including one that comes after the touch gave up waiting for it)
+                if (expectingReboot || (touchTried && !portDisconnected && !rebootSuccessful)) {
+                    log('Serial port disappeared during reboot. Please pick the ' + DRIVES + ' to verify bootloader mode.');
+                    toast('Port disconnected. Please pick the ' + DRIVES + ' to verify bootloader mode.', 'info');
                     selectedPort = null;
                     selectedPortInfo = null;
                     isOpen = false;
