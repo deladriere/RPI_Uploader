@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RP2040 Boot Mode Test (Web Serial) v1.2</title>
+    <title>RP2040 Boot Mode Test (Web Serial) v1.3</title>
     <style>
         :root {
             color-scheme: light dark;
@@ -111,6 +111,25 @@
         button.state-success:disabled,
         button.state-error:disabled {
             opacity: 1;
+        }
+
+        /* Main call to action once every precondition is met */
+        button.ready-to-go {
+            background: #2e7d32;
+            border-color: #1b5e20;
+            color: #fff;
+            font-weight: 600;
+            box-shadow: 0 0 0 3px #2e7d3240;
+            animation: ready-pulse 1.6s ease-in-out infinite;
+        }
+
+        button.ready-to-go:hover {
+            background: #1b5e20;
+        }
+
+        @keyframes ready-pulse {
+            0%, 100% { box-shadow: 0 0 0 3px #2e7d3240; }
+            50% { box-shadow: 0 0 0 7px #2e7d3220; }
         }
 
         input,
@@ -235,7 +254,7 @@
 </head>
 
 <body>
-    <h1>RP2040 Firmware Uploader <span class="badge">v1.2</span></h1>
+    <h1>RP2040 Firmware Uploader <span class="badge">v1.3</span></h1>
 
     <p class="muted" style="margin-bottom: 1.5rem;">
         Use Chrome or Edge (Web Serial required). Safari currently does not support Web Serial.
@@ -311,8 +330,8 @@
             </div>
 
             <div class="row">
-                <button id="btn-write-uf2" disabled>Write UF2 to Drive</button>
                 <span id="write-ready" class="badge">Not ready</span>
+                <button id="btn-write-uf2" disabled>Write UF2 to Drive</button>
             </div>
 
             <div class="status-section">
@@ -419,8 +438,11 @@
         function updateWriteReadyBadge() {
             const ready = !!(uf2Blob && selectedDirectory);
             writeReady.textContent = ready ? 'Ready' : 'Not ready';
+            writeReady.classList.remove('state-busy');
             writeReady.classList.toggle('state-success', ready);
             writeReady.classList.toggle('state-error', !ready);
+            writeUf2Btn.classList.remove('state-success', 'state-error');
+            writeUf2Btn.classList.toggle('ready-to-go', ready);
             writeUf2Btn.disabled = !ready;
 
             if (ready) {
@@ -477,6 +499,7 @@
                 paneUpload.classList.add('pane-disabled');
                 paneUpload.classList.remove('active');
                 writeUf2Btn.disabled = true;
+                writeUf2Btn.classList.remove('ready-to-go');
             }
         }
 
@@ -600,14 +623,12 @@
 
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-        function isLikelyRebootError(e) {
-            const text = String(e?.message || e || '').toLowerCase();
-            // Common messages when the device resets while the port is open/closing
-            return text.includes('device has been lost')
-                || text.includes('was disconnected')
-                || text.includes('transfer error')
-                || text.includes('pipe error')
-                || text.includes('operation timed out');
+        async function waitForPortDisconnect(timeoutMs) {
+            const start = Date.now();
+            while (!portDisconnected && Date.now() - start < timeoutMs) {
+                await sleep(50);
+            }
+            return portDisconnected;
         }
 
         async function do1200BpsTouch() {
@@ -630,6 +651,7 @@
             }
             await ensureClosed();
             expectingReboot = true;
+            let touchError = null;
             try {
                 log('Opening at 1200 bps...');
                 await selectedPort.open({ baudRate: 1200 });
@@ -653,77 +675,39 @@
                 // Close promptly; device should reset if it supports the 1200-bps touch
                 await selectedPort.close();
                 isOpen = false;
-
-                // Give the device a moment to reboot and disappear (increased wait for disconnect event)
-                await sleep(500);
-
-                // Check if port was already marked as disconnected by the event handler
-                if (portDisconnected) {
-                    // Disconnect event already handled it - nothing to do here
-                    touchBtn.classList.remove('state-busy');
-                    touchBtn.classList.add('state-success');
-                    log('Port disconnect confirmed by event handler. Please verify RPI-RP2 drive appears.');
-                } else {
-                    // Check if the port is still available - if it disappeared, reboot was successful
-                    let portStillExists = false;
-                    try {
-                        // Try to access port info - if port disappeared, this might fail or the port object becomes invalid
-                        if (selectedPort) {
-                            selectedPort.getInfo();
-                            portStillExists = true;
-                        }
-                    } catch {
-                        portStillExists = false;
-                    }
-
-                    if (!portStillExists || !selectedPort) {
-                        // Port disappeared - this is a good sign, but not confirmation
-                        log('Serial port disappeared. Please verify RPI-RP2 drive appears before confirming reboot success.');
-                        toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
-                        selectedPort = null;
-                        selectedPortInfo = null;
-                        setInfo('Port disconnected - verify drive');
-                        touchBtn.classList.remove('state-busy');
-                        touchBtn.classList.add('state-success');
-                        bootloaderStatus.textContent = 'Reboot successful - port disconnected';
-                        portDisconnected = true;
-                        rebootSuccessful = false; // Not confirmed until drive is picked
-                        updatePaneStates();
-                    } else {
-                        log('Closed after 1200-bps touch. Serial port still present - device may not have rebooted to bootloader.');
-                        toast('Port still present. Device may not be in bootloader mode.', 'error');
-                        touchBtn.classList.remove('state-busy');
-                        touchBtn.classList.add('state-error');
-                        bootloaderStatus.textContent = 'Port still present - reboot may have failed';
-                        portDisconnected = false;
-                        rebootSuccessful = false;
-                        updatePaneStates();
-                    }
-                }
             } catch (e) {
+                // A reboot often makes setSignals/close throw; judge the outcome by the disconnect below
                 console.error(e);
-                if (isLikelyRebootError(e)) {
-                    // Port disconnected during operation - good sign, but verify drive
+                touchError = e;
+            }
+
+            try {
+                bootloaderStatus.textContent = 'Waiting for device to reboot...';
+                // The disconnect event handler updates the UI as soon as the port drops off USB
+                if (await waitForPortDisconnect(3000)) {
                     isOpen = false;
-                    log('Serial port disappeared during 1200-bps touch. Please verify RPI-RP2 drive appears to confirm bootloader mode.');
-                    toast('Port disconnected. Please pick RPI-RP2 drive to verify bootloader mode.', 'info');
-                    selectedPort = null;
-                    selectedPortInfo = null;
-                    setInfo('Port disconnected - verify drive');
-                    touchBtn.classList.remove('state-busy');
+                    if (touchError) {
+                        log('Port error during reboot (expected): ' + (touchError?.message || touchError));
+                    }
+                    touchBtn.classList.remove('state-busy', 'state-error');
                     touchBtn.classList.add('state-success');
                     bootloaderStatus.textContent = 'Reboot successful - port disconnected';
-                    portDisconnected = true;
-                    rebootSuccessful = false; // Not confirmed until drive is picked
-                    updatePaneStates();
-                } else {
-                    log('1200-bps touch failed: ' + (e?.message || e));
+                    log('Port disconnect confirmed. Please verify RPI-RP2 drive appears.');
+                } else if (touchError) {
+                    log('1200-bps touch failed: ' + (touchError?.message || touchError));
                     toast('Failed to open at 1200 bps or toggle signals.', 'error');
                     touchBtn.classList.remove('state-busy');
                     touchBtn.classList.add('state-error');
                     bootloaderStatus.textContent = 'Reboot failed';
-                    portDisconnected = false;
                     rebootSuccessful = false;
+                } else {
+                    log('Closed after 1200-bps touch. Serial port still present - device may not have rebooted to bootloader.');
+                    toast('Port still present. Device may not be in bootloader mode.', 'error');
+                    touchBtn.classList.remove('state-busy');
+                    touchBtn.classList.add('state-error');
+                    bootloaderStatus.textContent = 'Port still present - reboot may have failed';
+                    rebootSuccessful = false;
+                    updatePaneStates();
                 }
             } finally {
                 expectingReboot = false;
@@ -849,12 +833,34 @@
         }
         pickDriveBtn.addEventListener('click', pickDrive);
 
+        async function isDriveStillMounted() {
+            try {
+                for await (const _ of selectedDirectory.keys()) break;
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        function showWriteResult(ok, statusText) {
+            uploadStatus.textContent = statusText;
+            writeUf2Btn.classList.remove('state-busy');
+            writeUf2Btn.classList.add(ok ? 'state-success' : 'state-error');
+            writeUf2Btn.disabled = ok;
+            writeReady.textContent = ok ? 'Done' : 'Failed';
+            writeReady.classList.remove('state-busy');
+            writeReady.classList.add(ok ? 'state-success' : 'state-error');
+        }
+
         async function writeUf2ToDrive() {
             if (!selectedDirectory || !uf2Blob) { alert('Pick a UF2 and the drive first.'); return; }
             try {
                 writeUf2Btn.disabled = true;
-                writeUf2Btn.classList.remove('state-success', 'state-error');
+                writeUf2Btn.classList.remove('state-success', 'state-error', 'ready-to-go');
                 writeUf2Btn.classList.add('state-busy');
+                writeReady.textContent = 'Writing...';
+                writeReady.classList.remove('state-success', 'state-error');
+                writeReady.classList.add('state-busy');
                 uploadStatus.textContent = 'Writing firmware...';
                 const fileHandle = await selectedDirectory.getFileHandle(uf2Name || 'firmware.uf2', { create: true });
                 const writable = await fileHandle.createWritable();
@@ -864,17 +870,21 @@
                 await writable.close();
                 log('Write complete. Device should reboot and the drive may disappear.');
                 toast('UF2 written. The device should reboot now.', 'success');
-                uploadStatus.textContent = 'Firmware uploaded successfully!';
-                writeUf2Btn.classList.remove('state-busy');
-                writeUf2Btn.classList.add('state-success');
+                showWriteResult(true, 'Firmware uploaded successfully!');
             } catch (e) {
                 console.error(e);
-                toast('Failed to write UF2: ' + explainFsWriteError(e), 'error');
-                uploadStatus.textContent = 'Upload failed';
-                writeUf2Btn.classList.remove('state-busy');
-                writeUf2Btn.classList.add('state-error');
-            } finally {
-                updateWriteReadyBadge();
+                // The RP2040 reboots as soon as it has received every UF2 block, which unmounts
+                // the drive and can make the browser's final write/close step throw.
+                await new Promise(r => setTimeout(r, 500));
+                if (!(await isDriveStillMounted())) {
+                    log('Write reported "' + (e?.name || 'error') + '" but the RPI-RP2 drive is gone: the device accepted the firmware and rebooted.');
+                    toast('UF2 written. The device rebooted.', 'success');
+                    showWriteResult(true, 'Firmware uploaded successfully - device rebooted');
+                } else {
+                    log('Write failed and the drive is still mounted: ' + explainFsWriteError(e));
+                    toast('Failed to write UF2: ' + explainFsWriteError(e), 'error');
+                    showWriteResult(false, 'Upload failed');
+                }
             }
         }
         writeUf2Btn.addEventListener('click', writeUf2ToDrive);

@@ -1,4 +1,4 @@
-## RP2040 Web Uploader v1.2 (no BOOT/SEL access)
+## RP2040 Web Uploader v1.3 (no BOOT/SEL access)
 
 
 
@@ -20,7 +20,8 @@ This page lets you reboot an RP2040 into BOOTSEL (UF2) mode and flash a `.uf2` f
 4. **Step 3 - Confirm/Pick Drive**: After reboot, click **Pick RPI-RP2 Drive** and select the root of the RPI‑RP2 volume that appears on your computer.
 5. **Step 4 - Upload Firmware**: 
    - Click **Select UF2 File** (or enter a **URL** and click **Fetch from URL**).
-   - Click **Write UF2 to Drive**. The board will reboot when the copy completes.
+   - Check that the badge above the write button shows **Ready** (a UF2 file and the drive are both selected). The **Write UF2 to Drive** button turns solid green and pulses when it can be used.
+   - Click **Write UF2 to Drive**, the last action of the workflow. The badge changes to **Done** or **Failed**, and the board reboots when the copy completes.
 
 Optional Query String Parameters:
 - `uf2_url`: Fills in the URL in the Upload Firmware step, so the user only needs to click "Fetch from URL" without pasting a link.
